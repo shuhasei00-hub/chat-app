@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 既存アプリと追加機能（keep / events / todos / wallet_tx / オープンチャット）は
+    // すべて artifacts/{appId}/public/data/ 配下に保存されます。
+    // 最低限、サインイン済みユーザーに読み書きを許可すれば動作します。
+    match /artifacts/{appId}/public/data/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+// 注意: ルールは複数の match が一致すると OR で評価されます。
+// コレクションごとに厳しくする場合は、上のワイルドカードを外して
+// すべてのコレクション（users, chats, posts, ...）を個別に定義してください。
