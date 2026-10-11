@@ -8,7 +8,7 @@ import { showNotice, goTo } from "./notify";
 const apiHeaders = async (user) => ({ "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` });
 
 const METHOD_LABEL = { konbini: "コンビニ", pay_easy: "Pay-easy", bank_transfer: "銀行振込", paypay: "PayPay", credit_card: "カード", card: "カード" };
-const PROVIDER_NAME = { stripe: "Stripe", komoju: "KOMOJU" };
+const PROVIDER_NAME = { stripe: "Stripe", komoju: "KOMOJU", univapay: "UnivaPay" };
 
 const STATUS = {
   pending: { label: "支払い待ち", cls: "text-amber-600 bg-amber-50", Icon: Clock },
@@ -92,12 +92,20 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
     (s) => setPayments(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt)).slice(0, 30)),
     console.error), [db, appId, user.uid]);
 
-  const pay = async (provider) => {
+  const [formOf, setFormOf] = useState(null); // 氏名等の入力が必要な事業者
+  const [cust, setCust] = useState({ name: "", email: "", phone: "", store: "seven_eleven" });
+  const pay = async (provider, customer) => {
+    if (provider.needsCustomer && !customer) return setFormOf(provider);
     setBusy(provider.id);
     try {
-      const res = await fetch("/api/pay/checkout", { method: "POST", headers: await apiHeaders(user), body: JSON.stringify({ provider: provider.id, packId }) });
+      const res = await fetch("/api/pay/checkout", { method: "POST", headers: await apiHeaders(user), body: JSON.stringify({ provider: provider.id, packId, customer }) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) throw new Error(data.error || `http ${res.status}`);
+      if (!res.ok || (!data.url && !data.direct)) throw new Error(data.error || `http ${res.status}`);
+      if (data.direct) { // 支払い票をアプリ内で直接表示
+        setFormOf(null); setBusy("");
+        if (data.ref) { confirmPayment(user, data.ref).catch(() => {}); setVoucherOf(data.ref); }
+        return;
+      }
       window.location.assign(data.url); // 事業者のホスト型決済ページへ
     } catch (e) {
       showNotification?.("決済を開始できませんでした: " + (e.message || e));
@@ -213,6 +221,22 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
           })}
         </div>
       </div>
+
+      {formOf && (
+        <div className="fixed inset-0 z-[300] bg-black/50 flex items-end justify-center" onClick={() => !busy && setFormOf(null)}>
+          <div className="bg-white w-full max-w-[430px] rounded-t-3xl p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="font-bold flex items-center gap-2"><Store className="w-5 h-5 text-green-600" />{formOf.name}で支払い票を発行</div>
+            <div className="text-xs text-gray-500">¥{pack?.yen?.toLocaleString()}（{pack?.label}）。カード情報は不要です。</div>
+            <select value={cust.store} onChange={(e) => setCust({ ...cust, store: e.target.value })} className="w-full border rounded-xl px-3 py-2 text-sm bg-white">
+              {Object.entries(formOf.stores || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <input value={cust.name} onChange={(e) => setCust({ ...cust, name: e.target.value })} placeholder="氏名（例: 山田 太郎）" className="w-full border rounded-xl px-3 py-2 text-sm" />
+            <input value={cust.email} type="email" onChange={(e) => setCust({ ...cust, email: e.target.value })} placeholder="メールアドレス" className="w-full border rounded-xl px-3 py-2 text-sm" />
+            <input value={cust.phone} type="tel" onChange={(e) => setCust({ ...cust, phone: e.target.value })} placeholder="電話番号（例: 09012345678）" className="w-full border rounded-xl px-3 py-2 text-sm" />
+            <button disabled={!!busy} onClick={() => pay(formOf, cust)} className="w-full py-3 rounded-xl bg-green-500 text-white font-bold text-sm disabled:opacity-50">{busy ? "発行中…" : "支払い票を発行する"}</button>
+          </div>
+        </div>
+      )}
 
       {voucherPayment && (
         <div className="fixed inset-0 z-[300] bg-black/50 flex items-end justify-center" onClick={() => setVoucherOf(null)}>

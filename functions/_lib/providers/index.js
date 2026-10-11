@@ -2,7 +2,8 @@
 // カード専用の PayPal / Square / PAY.JP は _optional/ に退避してあります（使う場合はここへ import を追加）。
 import stripe from "./stripe.js";
 import komoju from "./komoju.js";
+import univapay from "./univapay.js";
 
-export const PROVIDERS = { stripe, komoju };
+export const PROVIDERS = { stripe, komoju, univapay };
 export const listProviders = (env) =>
-  Object.values(PROVIDERS).map((p) => ({ id: p.id, name: p.name, desc: p.desc, methods: p.methods(env), enabled: p.enabled(env) }));
+  Object.values(PROVIDERS).map((p) => ({ id: p.id, name: p.name, desc: p.desc, methods: p.methods(env), enabled: p.enabled(env), needsCustomer: !!p.needsCustomer, stores: p.stores || null }));

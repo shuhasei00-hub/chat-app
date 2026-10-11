@@ -91,6 +91,9 @@ npm run build      # 本番ビルド
 | --- | --- | --- | --- |
 | 1 | Stripe | コンビニ（ファミリーマート・ローソン・ミニストップ・セイコーマート） | `STRIPE_SECRET_KEY` |
 | 2 | KOMOJU | コンビニ（セブン-イレブン含む主要チェーン）・Pay-easy | `KOMOJU_SECRET_KEY` |
+| 3 | UnivaPay | コンビニ（セブン・ファミマ・ローソン・ミニストップ・セイコーマート・デイリー）・Pay-easy。**アプリ内で氏名・メール・電話・店舗を入力して支払い票を直接発行** | `UNIVAPAY_SECRET`, `UNIVAPAY_APP_TOKEN` |
+
+UnivaPay の Webhook: ダッシュボードで `https://<ドメイン>/api/pay/webhook/univapay` を登録（`charge_updated` / `charge_finished`）。実装は公式ドキュメントで確認できた範囲です。**必ずテストモードで支払い票の発行→入金まで確認してください。**
 
 > カード専用の PayPal / Square / PAY.JP のコードは `functions/_lib/providers/_optional/` に退避してあります（使う場合は `providers/index.js` に追加）。
 

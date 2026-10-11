@@ -15,12 +15,12 @@ export const onRequestPost = async ({ env, request }) => {
     if (!pack) throw new HttpError(400, "チャージ額が正しくありません");
 
     const ref = crypto.randomUUID().replace(/-/g, "");
-    const { url, providerId } = await provider.create(env, { ref, pack, origin: appOrigin(env, request) });
+    const { url, providerId, extra } = await provider.create(env, { ref, pack, origin: appOrigin(env, request), customer: body.customer });
     await createDoc(env, ["payments", ref], {
       uid, provider: provider.id, providerId, packId: pack.id, yen: pack.yen, coins: pack.coins,
-      status: "pending", url, createdAt: new Date(),
+      status: "pending", url, ...(extra || {}), createdAt: new Date(),
     });
-    return json({ ref, url });
+    return json({ ref, url, direct: !url });
   } catch (e) {
     return json({ error: e.message || "error" }, e.status || 500);
   }

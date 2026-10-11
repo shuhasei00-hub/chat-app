@@ -16,3 +16,8 @@ STRIPE_SECRET_KEY=
 # --- ② KOMOJU（コンビニ払い / Pay-easy）---
 KOMOJU_SECRET_KEY=
 KOMOJU_PAYMENT_TYPES=konbini,pay_easy
+
+# --- ③ UnivaPay（コンビニ払い。アプリ内で支払い票を直接発行）---
+# ダッシュボード > 店舗 > アプリトークン の「シークレット」と「トークン(JWT)」
+UNIVAPAY_SECRET=
+UNIVAPAY_APP_TOKEN=
