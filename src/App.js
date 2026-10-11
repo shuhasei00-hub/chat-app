@@ -10,6 +10,7 @@ import WalletView from "./line/WalletView";
 import SettingsView from "./line/SettingsView";
 import ServicesView from "./line/ServicesView";
 import ChargeView, { PaymentWatcher } from "./line/ChargeView";
+import DevToolsView from "./line/DevToolsView";
 import { LaunchNotifier, notifyNewMessage, takePendingView } from "./line/notify";
 import BottomNav, { NAV_VIEWS } from "./line/BottomNav";
 import { BlockButton } from "./line/common";
@@ -8387,6 +8388,7 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
         view === "news" && /* @__PURE__ */ jsx(NewsView, { user, db, appId, showNotification }),
         view === "wallet" && /* @__PURE__ */ jsx(WalletView, { user, profile, allUsers, chats, db, appId, setView, showNotification }),
         view === "services" && /* @__PURE__ */ jsx(ServicesView, { setView }),
+        view === "devtools" && /* @__PURE__ */ jsx(DevToolsView, { user, setView }),
         view === "charge" && /* @__PURE__ */ jsx(ChargeView, { user, db, appId, setView, showNotification }),
         view === "openchat" && /* @__PURE__ */ jsx(OpenChatView, { user, profile, db, appId, setView, setActiveChatId, showNotification }),
         view === "keep" && /* @__PURE__ */ jsx(KeepView, { user, db, appId, setView, showNotification }),

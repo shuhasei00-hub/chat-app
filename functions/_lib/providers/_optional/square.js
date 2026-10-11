@@ -1,6 +1,6 @@
 // Square Checkout API（決済リンク）
 // env: SQUARE_ACCESS_TOKEN, SQUARE_LOCATION_ID, SQUARE_ENV("production" か "sandbox"。既定 sandbox)
-import { fetchJson } from "../util.js";
+import { fetchJson } from "../../util.js";
 
 const base = (env) => (env.SQUARE_ENV === "production" ? "https://connect.squareup.com" : "https://connect.squareupsandbox.com");
 const hdr = (env) => ({ authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`, "content-type": "application/json", "square-version": "2025-01-23" });
@@ -28,11 +28,11 @@ export default {
   async check(env, payment) {
     const d = await fetchJson(`${base(env)}/v2/orders/${payment.providerId}`, { headers: hdr(env) }, "Square");
     const o = d.order || {};
-    if (o.reference_id !== payment.ref) return "pending";
+    if (o.reference_id !== payment.ref) return { status: "pending" };
     const paidUp = (o.tenders || []).length > 0 && Number(o.net_amount_due_money?.amount ?? 1) === 0;
-    if ((o.state === "COMPLETED" || paidUp) && Number(o.total_money?.amount) === payment.yen) return "paid";
-    if (o.state === "CANCELED") return "failed";
-    return "pending";
+    if ((o.state === "COMPLETED" || paidUp) && Number(o.total_money?.amount) === payment.yen) return { status: "paid" };
+    if (o.state === "CANCELED") return { status: "failed" };
+    return { status: "pending" };
   },
   refFromWebhook: () => null, // Squareは return 時の確認ボタン/自動確認で確定
 };

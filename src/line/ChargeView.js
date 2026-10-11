@@ -1,17 +1,14 @@
 // コインチャージ（外部決済サービス連携）+ 決済からの戻り処理 + 入金通知
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { CreditCard, Store, Loader2, RefreshCw, ExternalLink, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { CreditCard, Store, Loader2, RefreshCw, ExternalLink, CheckCircle2, Clock, XCircle, Ticket, X, Copy } from "lucide-react";
 import { onSnapshot, query, where } from "firebase/firestore";
 import { PageHeader, EmptyState, Spinner, dataCol, toMillis, formatDateTime } from "./common";
 import { showNotice, goTo } from "./notify";
 
 const apiHeaders = async (user) => ({ "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` });
 
-const METHOD_LABEL = {
-  card: "カード", credit_card: "カード", konbini: "コンビニ", paypay: "PayPay", pay_easy: "Pay-easy",
-  bank_transfer: "銀行振込", paypal: "PayPal",
-};
-const PROVIDER_NAME = { stripe: "Stripe", komoju: "KOMOJU", paypal: "PayPal", square: "Square", payjp: "PAY.JP" };
+const METHOD_LABEL = { konbini: "コンビニ", pay_easy: "Pay-easy", bank_transfer: "銀行振込", paypay: "PayPay", credit_card: "カード", card: "カード" };
+const PROVIDER_NAME = { stripe: "Stripe", komoju: "KOMOJU" };
 
 const STATUS = {
   pending: { label: "支払い待ち", cls: "text-amber-600 bg-amber-50", Icon: Clock },
@@ -72,6 +69,8 @@ export const PaymentWatcher = ({ user, db, appId, setView, showNotification }) =
 const ChargeView = ({ user, db, appId, setView, showNotification }) => {
   const [conf, setConf] = useState(null); // { providers, packs }
   const [loadErr, setLoadErr] = useState(false);
+  const [voucherOf, setVoucherOf] = useState(null); // 支払い票モーダル
+  const autoFetched = useRef(new Set());
   const [packId, setPackId] = useState("p1000");
   const [busy, setBusy] = useState("");
   const [payments, setPayments] = useState([]);
@@ -115,14 +114,44 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
     setBusy("");
   };
 
+  // 支払い待ちなのに支払い票が未取得のものは、開いたときに1度だけ取りに行く
+  useEffect(() => {
+    payments.filter((p) => p.status === "pending" && !p.voucher && !autoFetched.current.has(p.id)).slice(0, 3).forEach((p) => {
+      autoFetched.current.add(p.id);
+      confirmPayment(user, p.id).catch(() => {});
+    });
+  }, [payments, user]);
+
+  const openVoucher = async (p) => {
+    if (p.voucher) return setVoucherOf(p.id);
+    setBusy(p.id);
+    try { await confirmPayment(user, p.id); } catch { /* 下で案内 */ }
+    setBusy("");
+    setVoucherOf(p.id);
+  };
+  const voucherPayment = payments.find((p) => p.id === voucherOf);
+  const copy = (t) => navigator.clipboard?.writeText(t).then(() => showNotification?.("コピーしました"));
+
   const pack = conf?.packs?.find((p) => p.id === packId);
+  const anyEnabled = !!conf?.providers?.some((p) => p.enabled);
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
       <PageHeader title="コインチャージ" onBack={() => setView("wallet")} />
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-24">
         {!conf && !loadErr && <Spinner />}
-        {loadErr && <EmptyState icon={<CreditCard className="w-10 h-10" />} title="決済サービスに接続できませんでした" hint="Cloudflare Pages にデプロイした環境（/api/pay）で利用できます。" />}
+        {loadErr && (
+          <div>
+            <EmptyState icon={<CreditCard className="w-10 h-10" />} title="決済サービスに接続できませんでした" hint="サーバー（/api/pay）が動いていません。デプロイ設定を確認してください。" />
+            <div className="text-center -mt-8 mb-4"><button onClick={() => setView("devtools")} className="text-xs font-bold text-green-600 underline">開発者ツールで接続を診断する</button></div>
+          </div>
+        )}
+        {conf && !anyEnabled && (
+          <div className="mx-4 mt-4 p-3 rounded-2xl bg-amber-50 text-amber-800 text-xs leading-relaxed">
+            決済サービスのAPIキーがまだ設定されていません。Cloudflareの「変数とシークレット」に <b>STRIPE_SECRET_KEY</b> または <b>KOMOJU_SECRET_KEY</b> を登録してください。
+            <button onClick={() => setView("devtools")} className="block mt-1 font-bold underline">接続診断を開く</button>
+          </div>
+        )}
         {conf && (
           <>
             <div className="px-4 pt-4 text-xs font-bold text-gray-400 mb-2">チャージ額</div>
@@ -135,7 +164,7 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
               ))}
             </div>
 
-            <div className="px-4 pt-5 text-xs font-bold text-gray-400 mb-2">お支払い方法を選ぶ</div>
+            <div className="px-4 pt-5 text-xs font-bold text-gray-400 mb-2">支払い票を発行する（コンビニで支払い）</div>
             <div className="mx-4 bg-white rounded-2xl border divide-y overflow-hidden">
               {conf.providers.map((p) => (
                 <button key={p.id} disabled={!p.enabled || !!busy || !pack} onClick={() => pay(p)} className="w-full flex items-center gap-3 px-4 py-3 text-left disabled:opacity-50">
@@ -155,7 +184,7 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
               ))}
             </div>
             <p className="px-5 pt-2 text-[11px] text-gray-400 leading-relaxed">
-              コンビニ払いは、決済ページに表示される番号で店頭にてお支払いください。入金が確認でき次第、コインが自動で反映され通知されます（最大数分〜数時間）。
+              ① 金額と事業者を選ぶ → ② 氏名・メールを入力して支払い票を発行 → ③ 表示された番号をコンビニの店頭で提示してお支払い → ④ 入金確認後、コインが自動で反映され通知されます（数分〜数十分程度）。支払い期限は発行から3日です。
             </p>
           </>
         )}
@@ -173,7 +202,8 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
                   <div className="text-[11px] text-gray-400">{PROVIDER_NAME[p.provider] || p.provider} ・ {formatDateTime(toMillis(p.createdAt))}</div>
                 </div>
                 {p.status === "pending" && (
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 items-center">
+                    <button onClick={() => openVoucher(p)} className="px-2.5 py-1.5 rounded-full bg-green-500 text-white text-[11px] font-bold flex items-center gap-1"><Ticket className="w-3.5 h-3.5" />支払い票</button>
                     {p.url && <a href={p.url} className="p-2 rounded-full hover:bg-gray-100 text-gray-400" aria-label="支払いページを開く"><ExternalLink className="w-4 h-4" /></a>}
                     <button disabled={busy === p.id} onClick={() => recheck(p)} className="p-2 rounded-full hover:bg-gray-100 text-gray-400" aria-label="入金を確認"><RefreshCw className={`w-4 h-4 ${busy === p.id ? "animate-spin" : ""}`} /></button>
                   </div>
@@ -183,6 +213,61 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
           })}
         </div>
       </div>
+
+      {voucherPayment && (
+        <div className="fixed inset-0 z-[300] bg-black/50 flex items-end justify-center" onClick={() => setVoucherOf(null)}>
+          <div className="bg-white w-full max-w-[430px] rounded-t-3xl p-5 max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center mb-3">
+              <div className="flex-1 font-bold flex items-center gap-2"><Ticket className="w-5 h-5 text-green-600" />コンビニ支払い票</div>
+              <button onClick={() => setVoucherOf(null)} aria-label="閉じる" className="p-1 text-gray-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="rounded-2xl bg-gray-50 p-4 mb-3">
+              <div className="text-[11px] text-gray-400">お支払い金額</div>
+              <div className="text-3xl font-black">¥{Number(voucherPayment.yen).toLocaleString()}</div>
+              <div className="text-xs text-gray-500 mt-1">{Number(voucherPayment.coins).toLocaleString()}コイン ・ {PROVIDER_NAME[voucherPayment.provider]}</div>
+              {voucherPayment.voucher?.expiresAt > 0 && <div className="text-xs font-bold text-red-500 mt-2">支払い期限: {formatDateTime(voucherPayment.voucher.expiresAt)}</div>}
+              <div className="mt-2 inline-block"><span className={`px-2 py-1 rounded-full text-[10px] font-bold ${(STATUS[voucherPayment.status] || STATUS.pending).cls}`}>{(STATUS[voucherPayment.status] || STATUS.pending).label}</span></div>
+            </div>
+
+            {voucherPayment.status === "paid" && <div className="text-sm text-green-600 font-bold mb-3">入金を確認しました。コインは反映済みです。</div>}
+            {voucherPayment.status === "failed" && <div className="text-sm text-gray-500 mb-3">この支払い票は期限切れまたは無効です。もう一度発行してください。</div>}
+
+            {voucherPayment.status === "pending" && (voucherPayment.voucher?.stores?.length > 0 ? (
+              <div className="space-y-2">
+                <div className="text-xs text-gray-500">店頭でこの番号を提示（または端末に入力）してお支払いください。</div>
+                {voucherPayment.voucher.stores.map((st, i) => (
+                  <div key={i} className="border rounded-2xl p-3">
+                    <div className="text-xs font-bold text-gray-500 mb-1">{st.name}</div>
+                    {st.paymentCode && (
+                      <button onClick={() => copy(st.paymentCode)} className="w-full text-left flex items-center justify-between">
+                        <span><span className="block text-[10px] text-gray-400">お支払い番号</span><span className="font-mono text-xl font-bold tracking-wider">{st.paymentCode}</span></span>
+                        <Copy className="w-4 h-4 text-gray-300" />
+                      </button>
+                    )}
+                    {st.confirmationNumber && (
+                      <button onClick={() => copy(st.confirmationNumber)} className="w-full text-left flex items-center justify-between mt-2">
+                        <span><span className="block text-[10px] text-gray-400">確認番号</span><span className="font-mono text-lg font-bold tracking-wider">{st.confirmationNumber}</span></span>
+                        <Copy className="w-4 h-4 text-gray-300" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 leading-relaxed">番号を取得できませんでした。下の「支払いページを開く」から、事業者の支払い票をご確認ください。まだ決済ページで申込みを完了していない場合は、完了してください。</div>
+            ))}
+
+            {voucherPayment.status === "pending" && (
+              <div className="flex gap-2 mt-4">
+                {(voucherPayment.voucher?.url || voucherPayment.url) && (
+                  <a href={voucherPayment.voucher?.url || voucherPayment.url} target="_blank" rel="noopener noreferrer" className="flex-1 py-3 rounded-xl bg-green-500 text-white font-bold text-sm text-center">支払いページを開く</a>
+                )}
+                <button disabled={busy === voucherPayment.id} onClick={() => recheck(voucherPayment)} className="flex-1 py-3 rounded-xl bg-gray-100 font-bold text-sm text-gray-600">入金を確認</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

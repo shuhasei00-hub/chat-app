@@ -1,6 +1,6 @@
 // PayPal Checkout (Orders v2, JPY)
 // env: PAYPAL_CLIENT_ID, PAYPAL_SECRET, PAYPAL_ENV("live" か "sandbox"。既定 sandbox)
-import { basic, fetchJson } from "../util.js";
+import { basic, fetchJson } from "../../util.js";
 
 const base = (env) => (env.PAYPAL_ENV === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com");
 
@@ -50,9 +50,9 @@ export default {
       // お客様が承認済み → ここで売上確定（capture）。確定はサーバー側の一度きり
       o = await fetchJson(`${base(env)}/v2/checkout/orders/${payment.providerId}/capture`, { method: "POST", headers: { ...h, "paypal-request-id": `cap-${payment.providerId}` }, body: "{}" }, "PayPal capture");
     }
-    if (o.status === "COMPLETED" && capturedOk(o, payment.yen)) return "paid";
-    if (o.status === "VOIDED") return "failed";
-    return "pending";
+    if (o.status === "COMPLETED" && capturedOk(o, payment.yen)) return { status: "paid" };
+    if (o.status === "VOIDED") return { status: "failed" };
+    return { status: "pending" };
   },
   refFromWebhook: (body) => body?.resource?.custom_id || body?.resource?.purchase_units?.[0]?.custom_id,
 };

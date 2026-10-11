@@ -1,0 +1,14 @@
+{
+  // Cloudflare Workers の設定。name は今のURL（chat-app.shuhasei00.workers.dev）に合わせて "chat-app"。
+  // ダッシュボードの Worker 名と違う場合は、ここを合わせてください。
+  "name": "chat-app",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "./build",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true }
+}

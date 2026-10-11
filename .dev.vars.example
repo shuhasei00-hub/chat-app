@@ -1,31 +1,18 @@
-# ローカル(wrangler pages dev)用。本番は Cloudflare Pages の「設定 > 環境変数」に同じ名前で登録（Secret推奨）
+# ローカル(wrangler dev)用。本番は Cloudflare の「設定 > 変数とシークレット」に同じ名前で登録（種類は「シークレット」推奨）
+# ※「ビルド」の変数ではなく、ランタイム（Worker）の変数です。
 # このファイルを .dev.vars にコピーして値を入れてください。.dev.vars は Git に入れないこと。
 
-# --- 共通（決済でウォレットへ入金するために必須）---
+# --- 共通（必須）---
 FIREBASE_API_KEY=            # src/App.js の firebaseConfig.apiKey と同じ値
+FIREBASE_SERVICE_ACCOUNT=    # Firebaseコンソール > プロジェクトの設定 > サービスアカウント > 新しい秘密鍵 のJSONを、1行にして貼る
 FIREBASE_PROJECT_ID=chat-app-c17bf
 APP_ID=messenger-app-v9-integrated
-FIREBASE_SERVICE_ACCOUNT=    # Firebaseコンソール > サービスアカウント > 新しい秘密鍵 のJSONを1行で貼る
-APP_URL=                     # 例 https://your-app.pages.dev （省略時はアクセス元のURL）
+APP_URL=https://chat-app.shuhasei00.workers.dev   # 決済後に戻ってくるURL（省略時はアクセス元）
 
-# --- ① Stripe（カード / コンビニ / PayPay）---
+# --- ① Stripe（コンビニ払い）---
+# テスト: sk_test_...  本番: sk_live_...
 STRIPE_SECRET_KEY=
-STRIPE_METHODS=card,konbini  # PayPayを有効化したら card,konbini,paypay
 
-# --- ② KOMOJU（コンビニ各社 / Pay-easy / 銀行振込 / PayPay / カード）---
+# --- ② KOMOJU（コンビニ払い / Pay-easy）---
 KOMOJU_SECRET_KEY=
-KOMOJU_PAYMENT_TYPES=konbini,credit_card,pay_easy,bank_transfer,paypay
-
-# --- ③ PayPal ---
-PAYPAL_CLIENT_ID=
-PAYPAL_SECRET=
-PAYPAL_ENV=sandbox           # 本番は live
-
-# --- ④ Square ---
-SQUARE_ACCESS_TOKEN=
-SQUARE_LOCATION_ID=
-SQUARE_ENV=sandbox           # 本番は production
-
-# --- ⑤ PAY.JP (v2 Checkout) ---
-PAYJP_SECRET_KEY=
-PAYJP_WEBHOOK_TOKEN=         # ダッシュボードの「発信元トークン」(任意)
+KOMOJU_PAYMENT_TYPES=konbini,pay_easy

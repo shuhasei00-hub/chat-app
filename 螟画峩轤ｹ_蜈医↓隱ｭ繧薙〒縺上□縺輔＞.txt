@@ -1,0 +1,10 @@
+このzipは「前回のzipからの変更・追加ファイル」だけです。同じパスで上書きしてください。
+
+【新規】 wrangler.jsonc / worker/index.js / functions/api/diag.js / src/line/DevToolsView.js
+【変更】 functions/_lib/pay.js, providers/index.js, providers/stripe.js, providers/komoju.js, src/App.js, src/index.js,
+        src/line/ChargeView.js, src/line/SettingsView.js, .dev.vars.example, README.md
+【移動】 functions/_lib/providers/{paypal,square,payjp}.js → functions/_lib/providers/_optional/（元の場所のファイルは削除）
+
+★ 一番大事: 今のURLは *.workers.dev（Workers）です。wrangler.jsonc と worker/ を追加して再デプロイすると /api が動きます。
+  Cloudflare > Worker > 設定 > ビルド: ビルドコマンド npm run build / デプロイコマンド npx wrangler deploy
+  その後「変数とシークレット」にキーを登録（.dev.vars.example 参照）。詳しくは README。

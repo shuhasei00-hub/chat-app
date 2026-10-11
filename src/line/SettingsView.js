@@ -1,6 +1,6 @@
 // 設定: アカウント / 友だち管理（ブロック・非表示）/ 通知 / ログアウト
 import React, { useMemo, useState } from "react";
-import { ChevronRight, Ban, EyeOff, BellOff, Bell, LogOut, Copy, UserCog, Info } from "lucide-react";
+import { ChevronRight, Ban, EyeOff, BellOff, Bell, LogOut, Copy, UserCog, Info, Terminal } from "lucide-react";
 import { arrayRemove, updateDoc } from "firebase/firestore";
 import { PageHeader, dataDoc } from "./common";
 import { getPrefs, setPrefs, requestPermission, showNotice, enablePeriodicNews, registerSW } from "./notify";
@@ -121,6 +121,7 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
         </Section>
 
         <Section title="その他">
+          <Row icon={Terminal} label="開発者ツール" value="診断・コンソール" onClick={() => setView("devtools")} />
           <Row icon={Info} label="バージョン" value={APP_VERSION} />
           <Row icon={LogOut} label="ログアウト" danger onClick={() => window.confirm("ログアウトしますか？") && onLogout()} />
         </Section>

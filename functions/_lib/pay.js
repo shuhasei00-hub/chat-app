@@ -1,4 +1,4 @@
-// 支払いの状態確認 → 入金（冪等）
+// 支払いの状態確認 → 入金（冪等）／支払い票の保存
 import { getDoc, patchDoc, settlePayment } from "./firestore.js";
 import { PROVIDERS } from "./providers/index.js";
 import { HttpError } from "./util.js";
@@ -11,7 +11,7 @@ export const confirmPayment = async (env, ref, uid) => {
   const provider = PROVIDERS[p.provider];
   if (!provider) throw new HttpError(500, "未知の決済プロバイダです");
   const result = await provider.check(env, { ...p, ref });
-  if (result === "paid") {
+  if (result.status === "paid") {
     try {
       await settlePayment(env, p, ref);
     } catch (e) {
@@ -20,9 +20,13 @@ export const confirmPayment = async (env, ref, uid) => {
     }
     return { status: "paid", coins: p.coins };
   }
-  if (result === "failed") {
+  if (result.status === "failed") {
     await patchDoc(env, ["payments", ref], { status: "failed" }, p.__updateTime).catch(() => {});
     return { status: "failed", coins: p.coins };
   }
-  return { status: "pending", coins: p.coins };
+  // 支払い待ち: 支払い票(店舗別コード・期限)を保存して、アプリ内に表示できるようにする
+  if (result.voucher && JSON.stringify(result.voucher) !== JSON.stringify(p.voucher || null)) {
+    await patchDoc(env, ["payments", ref], { voucher: result.voucher }, p.__updateTime).catch(() => {});
+  }
+  return { status: "pending", coins: p.coins, voucher: result.voucher || p.voucher || null };
 };

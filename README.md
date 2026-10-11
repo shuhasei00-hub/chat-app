@@ -71,41 +71,61 @@ npm run build      # 本番ビルド
 - 通知タップで該当画面（ニュースなど）が開きます。
 - **制限**: Webアプリは「端末の電源を入れた瞬間」には動けません。通知は「アプリ（PWA）を開いたとき」に出ます。アプリを完全に閉じている間のメッセージ通知には、FCM などの Web Push サーバーが別途必要です（`public/sw.js` に `push` 受信処理は入れてあります）。iPhone は「ホーム画面に追加」したPWAでのみ通知が使えます。
 
-## 決済連携（コインチャージ）
+## デプロイ（Cloudflare Workers / Pages どちらでも可）
 
-サービス > コインチャージ / ウォレット > チャージ から、外部決済サービスの**ホスト型決済ページ**でコインを購入できます。
-カード番号などはこのアプリを通らず、各社の決済ページで入力されます。
+`https://xxx.workers.dev` の形で公開している場合は **Workers** です。Workers では Pages 用の `functions/` は動かないため、`worker/index.js` + `wrangler.jsonc` で `/api/*` を処理します（ハンドラ本体は `functions/` と共通）。
+
+- ダッシュボード > 該当Worker > 設定 > ビルド で
+  - ビルドコマンド: `npm run build`
+  - デプロイコマンド: `npx wrangler deploy`
+- `wrangler.jsonc` の `name` は **Worker名と同じ**にしてください（今は `chat-app`）。違うと別Workerが作られます。
+- 環境変数・シークレットは「設定 > 変数とシークレット」に登録します（`.dev.vars.example` 参照。「ビルド」の変数とは別物です）。
+- Pages でデプロイする場合は従来どおり（出力 `build`、`functions/` が自動で使われます）。
+- デプロイ後、アプリの **設定 > 開発者ツール > 接続診断** で、`/api` が動いているか・キーが設定済みかを確認できます。
+
+## 決済連携（コインチャージ: コンビニで支払い票を提示して支払う）
+
+サービス > コインチャージ（ウォレット > チャージ）から、**支払い票を発行 → コンビニで提示して支払い → コイン加算**の流れで購入できます。カードは扱いません。
 
 | # | サービス | 支払い方法 | 必要な環境変数 |
 | --- | --- | --- | --- |
-| 1 | Stripe | カード / **コンビニ** / PayPay | `STRIPE_SECRET_KEY` |
-| 2 | KOMOJU | **コンビニ各社** / Pay-easy / 銀行振込 / PayPay / カード | `KOMOJU_SECRET_KEY` |
-| 3 | PayPal | PayPal / カード | `PAYPAL_CLIENT_ID`, `PAYPAL_SECRET` |
-| 4 | Square | カード | `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID` |
-| 5 | PAY.JP | カード | `PAYJP_SECRET_KEY` |
+| 1 | Stripe | コンビニ（ファミリーマート・ローソン・ミニストップ・セイコーマート） | `STRIPE_SECRET_KEY` |
+| 2 | KOMOJU | コンビニ（セブン-イレブン含む主要チェーン）・Pay-easy | `KOMOJU_SECRET_KEY` |
 
-キーを設定したサービスだけ選べます（未設定は「準備中」表示）。全変数は `.dev.vars.example` を参照してください。
+> カード専用の PayPal / Square / PAY.JP のコードは `functions/_lib/providers/_optional/` に退避してあります（使う場合は `providers/index.js` に追加）。
+
+### 利用者の流れ
+1. 金額を選び、事業者を選ぶ → 事業者の決済ページで氏名・メールを入力
+2. **支払い票**（お支払い番号・確認番号・支払い期限）が発行される。アプリ内の「チャージ履歴 > 支払い票」でいつでも再表示できます
+3. コンビニの店頭で番号を提示して現金などで支払い
+4. 事業者が入金を通知 → サーバーがコインを加算 → アプリに通知（支払い期限は発行から3日）
 
 ### 仕組み（安全のためサーバー側で入金）
+- `POST /api/pay/checkout`（Firebase IDトークンで本人確認）→ 決済ページURLを返し、`payments` に「支払い待ち」を記録
+- 入金は **サーバーだけ**が実行。事業者APIに「本当に支払い済みか」を問い合わせ、Firestoreの `wallet` を原子的に加算します（`functions/_lib/firestore.js`）。webhook・戻りURL・確認ボタンが重なっても二重入金しません
+- Webhook は「確認のきっかけ」としてだけ使います（偽の通知が来ても、事業者APIで確認できなければ入金しません）
 
-1. 画面 → `POST /api/pay/checkout`（Firebase IDトークンで本人確認）→ 事業者の決済ページURLを返し、`payments` に「支払い待ち」を記録
-2. お客様が決済ページで支払い（コンビニは店頭で支払い）
-3. 入金は **サーバーだけ**が実行します。事業者APIに「本当に支払い済みか」を問い合わせ、Firestoreの `wallet` を原子的に加算（`functions/_lib/firestore.js`）。webhook・戻りURL・確認ボタンが重なっても二重入金しません
-4. 画面に通知（アプリ内 + 端末通知）
+### 本番（実際のお金）にする手順
+1. **事業者の本番アカウントを用意**（Stripe / KOMOJU）。事業者名・代表者・口座などの審査があります。コンビニ払いは審査で別途有効化が必要な場合があります
+2. 本番キー（`sk_live_...` など）を Cloudflare の「変数とシークレット」に登録（テストキーと差し替え）
+3. **Webhook を登録**（コンビニは店頭で払うため必須）:
+   - Stripe: `https://<ドメイン>/api/pay/webhook/stripe` — イベント `checkout.session.completed` / `checkout.session.async_payment_succeeded` / `checkout.session.async_payment_failed`
+   - KOMOJU: `https://<ドメイン>/api/pay/webhook/komoju` — イベント `payment.captured`
+4. `FIREBASE_SERVICE_ACCOUNT` と `FIREBASE_API_KEY` を登録（入金に必須）
+5. **先にテストモードで一通り確認**。Stripe のコンビニ払いテストは、決済フォームでメール `{任意}succeed_immediately@example.com` と確認番号 `22222222220`（すぐ成功）などが使えます
+6. 少額（例: 300円）で本番の支払いを1回やって、コイン加算・通知まで確認
 
-必要な設定:
+### 公開前に必ず確認してください（法令・運用）
+- **特定商取引法に基づく表記**（販売事業者名・住所・連絡先・返金条件）のページが必要です
+- コイン（前払式支払手段）の販売は **資金決済法** の対象になる可能性があります（未使用残高が一定額を超えると届出、有効期限や払戻しのルールなど）。事業として行う前に専門家へ確認してください
+- コンビニ払いは払戻しが難しいため、返金方針を決めておいてください
+- ⚠️ **残高の改ざん対策**: ウォレットの送金・ボーナス・ゲームは元々ブラウザ側で残高を書き換える作りで、利用者がブラウザから `wallet` を書き換えられます。有料コインとして売るなら、この部分をサーバー処理に置き換えるか、Firestoreルールで `wallet` のクライアント書き込みを禁止する改修が必要です（今回のチャージはサーバー側ですが、既存機能はそのままです）
 
-- Cloudflare Pages の環境変数に、上記のキーと `FIREBASE_API_KEY` / `FIREBASE_SERVICE_ACCOUNT` を登録（Secret推奨）
-- 事業者ダッシュボードの Webhook の送信先（コンビニなど非同期の入金通知に必須）:
-  - Stripe: `https://<ドメイン>/api/pay/webhook/stripe`（イベント: `checkout.session.completed` / `checkout.session.async_payment_succeeded` / `checkout.session.async_payment_failed`）
-  - KOMOJU: `https://<ドメイン>/api/pay/webhook/komoju`（`payment.captured`）
-  - PAY.JP: `https://<ドメイン>/api/pay/webhook/payjp`（`checkout.session.completed`）
-  - PayPal / Square: webhook不要（決済ページから戻ったときに自動確認。チャージ履歴の更新ボタンでも確認できます）
-- チャージ額は `functions/_lib/packs.js` で変更できます
-- Firestoreルールは `docs/firestore.rules.example`（`payments` は本人だけ読み取り可）
+## 開発者ツール
 
-> ⚠️ **実際の決済はまだ試験していません。** 各社のテストモード（Stripe/PayPal/Squareはsandbox、KOMOJUはテストキー）で、必ず一通り動作確認してから本番キーに切り替えてください。特に **PAY.JP は公式ドキュメントで認証方式を確認しきれていない**ため、動かない場合は `functions/_lib/providers/payjp.js` の認証ヘッダを調整してください。
-> また、コインの販売は資金決済法（前払式支払手段）や特定商取引法の表示義務に該当する可能性があります。公開前に確認してください。
+設定 > **開発者ツール** から使えます。
+- **接続診断**: `/api` の稼働、決済API、ニュースAPI、ログイン、通知許可、Service Worker、サーバー側キーの設定有無（値は表示しません）をチェック
+- **アプリ内コンソール**: スマホでも使える Console / Network / Elements / Storage（[eruda](https://github.com/liriliri/eruda)）をON/OFF。PCなら F12 でもブラウザ標準の開発者ツールが使えます
 
 ## 新しいデータ（Firestore）
 

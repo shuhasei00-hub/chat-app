@@ -1,7 +1,7 @@
 // PAY.JP v2 Checkout（外部リンク型決済）
 // env: PAYJP_SECRET_KEY, PAYJP_WEBHOOK_TOKEN(任意。ダッシュボードの「発信元トークン」)
 // ※ 認証方式・パスは PAY.JP v2 ドキュメント準拠で実装しています。ご自身のキーで動作確認してください。
-import { fetchJson } from "../util.js";
+import { fetchJson } from "../../util.js";
 
 const API = "https://api.pay.jp/v2";
 const hdr = (env) => ({ authorization: `Bearer ${env.PAYJP_SECRET_KEY}`, "content-type": "application/json" });
@@ -27,9 +27,9 @@ export default {
   },
   async check(env, payment) {
     const s = await fetchJson(`${API}/checkout/sessions/${payment.providerId}`, { headers: hdr(env) }, "PAY.JP");
-    if (s.status === "complete") return "paid";
-    if (s.status === "expired") return "failed";
-    return "pending";
+    if (s.status === "complete") return { status: "paid" };
+    if (s.status === "expired") return { status: "failed" };
+    return { status: "pending" };
   },
   verifyWebhook: (env, request) => !env.PAYJP_WEBHOOK_TOKEN || request.headers.get("x-payjp-webhook-token") === env.PAYJP_WEBHOOK_TOKEN,
   refFromWebhook: (body) => body?.data?.metadata?.ref,
