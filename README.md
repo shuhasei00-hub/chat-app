@@ -148,6 +148,17 @@ RFC 8291 付録Aの公式テストベクタ、独立実装での往復復号、V
 | 2 | KOMOJU | コンビニ（セブン-イレブン含む主要チェーン）・Pay-easy | `KOMOJU_SECRET_KEY` |
 | 3 | UnivaPay | コンビニ（セブン・ファミマ・ローソン・ミニストップ・セイコーマート・デイリー）・Pay-easy。**アプリ内で氏名・メール・電話・店舗を入力して支払い票を直接発行** | `UNIVAPAY_SECRET`, `UNIVAPAY_APP_TOKEN` |
 
+| 4 | fincode byGMO | コンビニ（セブン・ローソン・ファミマ・ミニストップ・セイコーマート）。**決済ページ型**（`fincode`）と**アプリ内バーコード型**（`fincode_direct`）の2つを同時に使えます | `FINCODE_SECRET_KEY`, `FINCODE_ENV`, `FINCODE_WEBHOOK_SIGNATURE`(任意) |
+
+### fincode の設定（公式OpenAPI 1.4.0 に基づく）
+- **決済ページ型**: `POST /v1/sessions` で決済URLを発行 → fincode の支払い画面でバーコードを表示。決済後、fincode は `success_url`/`cancel_url` へ **POST** でリダイレクトするため、`/api/pay/return` が受けてアプリへ 303 で戻します。
+- **アプリ内バーコード型**: `POST /v1/payments`（登録）→ `PUT /v1/payments/{id}`（実行、端末情報つき）でバーコード画像(Base64)を取得し、支払い票の画面に表示します。⚠️ 自画面でのバーコード表示は、**fincode／コンビニ事業者の追加審査とレギュレーション遵守が必要**です（本番前に fincode へ確認してください）。テスト環境では審査なしで試せます。
+- 入金判定は `GET /v1/payments/{id}?pay_type=Konbini` の `status = CAPTURED`（金額も照合）。Webhook は確認のきっかけだけに使います。
+- 管理画面 > API・Webhook で Webhook を登録: URL `https://<ドメイン>/api/pay/webhook/fincode`、イベント `payments.konbini.*`（テスト環境は `payments.konbini.complete.stub`）。「署名」を決めたら `FINCODE_WEBHOOK_SIGNATURE` に同じ値を登録。
+- テスト入金: テスト環境の管理画面 > 決済 > コンビニ決済 から、疑似的に入金完了にできます（公式解説記事の記載）。
+- 本番へ: 本番審査通過後、本番のシークレットキーに差し替え、`FINCODE_ENV=live` にし、本番側にも Webhook を登録します。
+- 端末情報（バーコード表示用）は iPhone=CSSピクセル、それ以外=物理ピクセルで送ります。PC などでの表示は公式に規定がないため、実機で確認してください。
+
 UnivaPay の Webhook: ダッシュボードで `https://<ドメイン>/api/pay/webhook/univapay` を登録（`charge_updated` / `charge_finished`）。実装は公式ドキュメントで確認できた範囲です。**必ずテストモードで支払い票の発行→入金まで確認してください。**
 
 > カード専用の PayPal / Square / PAY.JP のコードは `functions/_lib/providers/_optional/` に退避してあります（使う場合は `providers/index.js` に追加）。

@@ -5,10 +5,21 @@ import { onSnapshot, query, where } from "firebase/firestore";
 import { PageHeader, EmptyState, Spinner, dataCol, toMillis, formatDateTime } from "./common";
 import { showNotice, goTo } from "./notify";
 
+// バーコード表示用の端末情報（fincode仕様: iPhoneはCSSピクセル、それ以外は物理ピクセル）
+const deviceInfo = () => {
+  const ua = navigator.userAgent || "";
+  const ratio = window.devicePixelRatio || 1;
+  const iphone = /iPhone|iPad|iPod/.test(ua);
+  const w = window.screen?.width || 375, h = window.screen?.height || 812;
+  return iphone
+    ? { device_name: "iPhone", win_width: String(Math.round(w)), win_height: String(Math.round(h)), pixel_ratio: ratio.toFixed(2), win_size_type: "2" }
+    : { device_name: "Android", win_width: String(Math.round(w * ratio)), win_height: String(Math.round(h * ratio)), pixel_ratio: ratio.toFixed(2), win_size_type: "1" };
+};
+
 const apiHeaders = async (user) => ({ "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` });
 
 const METHOD_LABEL = { konbini: "コンビニ", pay_easy: "Pay-easy", bank_transfer: "銀行振込", paypay: "PayPay", credit_card: "カード", card: "カード" };
-const PROVIDER_NAME = { stripe: "Stripe", komoju: "KOMOJU", univapay: "UnivaPay" };
+const PROVIDER_NAME = { stripe: "Stripe", komoju: "KOMOJU", univapay: "UnivaPay", fincode: "fincode", fincode_direct: "fincode" };
 
 const STATUS = {
   pending: { label: "支払い待ち", cls: "text-amber-600 bg-amber-50", Icon: Clock },
@@ -96,6 +107,7 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
   const [cust, setCust] = useState({ name: "", email: "", phone: "", store: "seven_eleven" });
   const pay = async (provider, customer) => {
     if (provider.needsCustomer && !customer) return setFormOf(provider);
+    if (provider.needsDevice) customer = { ...(customer || {}), device: deviceInfo() };
     setBusy(provider.id);
     try {
       const res = await fetch("/api/pay/checkout", { method: "POST", headers: await apiHeaders(user), body: JSON.stringify({ provider: provider.id, packId, customer }) });
@@ -256,7 +268,19 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
             {voucherPayment.status === "paid" && <div className="text-sm text-green-600 font-bold mb-3">入金を確認しました。コインは反映済みです。</div>}
             {voucherPayment.status === "failed" && <div className="text-sm text-gray-500 mb-3">この支払い票は期限切れまたは無効です。もう一度発行してください。</div>}
 
-            {voucherPayment.status === "pending" && (voucherPayment.voucher?.stores?.length > 0 ? (
+            {voucherPayment.status === "pending" && voucherPayment.voucher?.barcode?.data && (
+              <div className="space-y-2">
+                <div className="text-xs text-gray-500">レジでこのバーコードを読み取ってもらい、お支払いください（セブン-イレブン・ローソン・ファミリーマート・ミニストップ・セイコーマート）。画面の明るさを上げてください。</div>
+                <div className="border rounded-2xl p-3 bg-white overflow-x-auto flex justify-center">
+                  <img alt="支払い用バーコード" src={`data:image/${voucherPayment.voucher.barcode.format === "jpg" ? "jpeg" : voucherPayment.voucher.barcode.format};base64,${voucherPayment.voucher.barcode.data}`}
+                    width={voucherPayment.voucher.barcode.width || undefined} height={voucherPayment.voucher.barcode.height || undefined} style={{ maxWidth: "none", imageRendering: "pixelated" }} />
+                </div>
+              </div>
+            )}
+            {voucherPayment.status === "pending" && !voucherPayment.voucher?.barcode?.data && voucherPayment.voucher?.kind === "link" && (
+              <div className="text-xs text-gray-500 leading-relaxed">下の「支払いページを開く」から、支払い方法（コンビニ）を選んでバーコードを表示してください。</div>
+            )}
+            {voucherPayment.status === "pending" && !voucherPayment.voucher?.barcode?.data && voucherPayment.voucher?.kind !== "link" && (voucherPayment.voucher?.stores?.length > 0 ? (
               <div className="space-y-2">
                 <div className="text-xs text-gray-500">店頭でこの番号を提示（または端末に入力）してお支払いください。</div>
                 {voucherPayment.voucher.stores.map((st, i) => (

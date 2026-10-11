@@ -29,3 +29,9 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:あなたのメールアドレス
 # （任意）Chrome/Firefox/Safari/Edge 以外のプッシュサービスを使う場合のみ、許可するホスト名の末尾をカンマ区切りで
 # PUSH_ENDPOINT_ALLOW=
+
+# --- ④ fincode byGMO（コンビニ払い。決済ページ型 / アプリ内バーコード型の両方）---
+# 管理画面 > API・Webhook の「シークレットキー」。テスト環境と本番環境でキーは別
+FINCODE_SECRET_KEY=
+FINCODE_ENV=test                 # test（既定・テスト環境）/ live（本番。審査通過後に切り替え）
+FINCODE_WEBHOOK_SIGNATURE=       # 任意。Webhook設定で決めた「署名」と同じ文字列（設定すると Fincode-Signature ヘッダで送信元を検証）

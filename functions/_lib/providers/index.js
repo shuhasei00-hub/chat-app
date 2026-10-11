@@ -3,7 +3,8 @@
 import stripe from "./stripe.js";
 import komoju from "./komoju.js";
 import univapay from "./univapay.js";
+import { fincode, fincodeDirect } from "./fincode.js";
 
-export const PROVIDERS = { stripe, komoju, univapay };
+export const PROVIDERS = { stripe, komoju, univapay, fincode, fincode_direct: fincodeDirect };
 export const listProviders = (env) =>
-  Object.values(PROVIDERS).map((p) => ({ id: p.id, name: p.name, desc: p.desc, methods: p.methods(env), enabled: p.enabled(env), needsCustomer: !!p.needsCustomer, stores: p.stores || null }));
+  Object.values(PROVIDERS).map((p) => ({ id: p.id, name: p.name, desc: p.desc, methods: p.methods(env), enabled: p.enabled(env), needsCustomer: !!p.needsCustomer, needsDevice: !!p.needsDevice, stores: p.stores || null }));

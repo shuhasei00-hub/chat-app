@@ -1,3 +1,9 @@
+【v5 追加】fincode byGMO のコンビニ決済（決済ページ型 + アプリ内バーコード型）
+  新規: functions/_lib/providers/fincode.js / functions/api/pay/return.js / tests/fincode.test.mjs
+  変更: providers/index.js, webhook/[provider].js(receive:"0"を返す), worker/index.js(/api/pay/return), diag.js, ChargeView.js(バーコード表示・端末情報), .dev.vars.example, README.md
+  Cloudflareに FINCODE_SECRET_KEY（と FINCODE_ENV=test）を登録 → 再デプロイ → 設定>開発者ツール>接続診断で確認
+  テスト: npm run test:server
+
 【今回の変更】フルセットのzipです（そのまま上書き or 新規デプロイできます）
 
 1) アプリを閉じていてもメッセージ通知 / 着信通知（振動つき）/ 不在着信

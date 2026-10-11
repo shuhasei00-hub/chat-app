@@ -7,6 +7,7 @@ import { onRequestGet as providers } from "../functions/api/pay/providers.js";
 import { onRequestPost as checkout } from "../functions/api/pay/checkout.js";
 import { onRequestPost as confirm } from "../functions/api/pay/confirm.js";
 import { onRequestPost as webhook } from "../functions/api/pay/webhook/[provider].js";
+import { onRequestGet as payReturnGet, onRequestPost as payReturnPost } from "../functions/api/pay/return.js";
 import { onRequestGet as diag } from "../functions/api/diag.js";
 import { onRequestGet as pushKey } from "../functions/api/push/key.js";
 import { onRequestPost as pushSubscribe } from "../functions/api/push/subscribe.js";
@@ -29,6 +30,8 @@ const ROUTES = [
   ["GET", "/api/pay/providers", providers],
   ["POST", "/api/pay/checkout", checkout],
   ["POST", "/api/pay/confirm", confirm],
+  ["POST", "/api/pay/return", payReturnPost], // fincode は決済後に POST でリダイレクトしてくる
+  ["GET", "/api/pay/return", payReturnGet],
   ["POST", /^\/api\/pay\/webhook\/([a-z0-9_-]+)$/, (c, m) => webhook({ ...c, params: { provider: m[1] } })],
   ["GET", "/api/push/key", pushKey],
   ["POST", "/api/push/subscribe", pushSubscribe],

@@ -15,6 +15,7 @@ export const onRequestGet = ({ env, request }) =>
       APP_ID: env.APP_ID || "(既定 messenger-app-v9-integrated)",
       VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
       VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
+      FINCODE_ENV: env.FINCODE_SECRET_KEY ? (env.FINCODE_ENV === "live" ? "live（本番）" : "test（テスト）") : "(fincode未設定)",
       VAPID_SUBJECT: env.VAPID_SUBJECT || "(未設定 → mailto:admin@example.com)",
     },
     push: { enabled: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.FIREBASE_SERVICE_ACCOUNT) },
