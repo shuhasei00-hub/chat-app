@@ -4,6 +4,7 @@ import { ChevronRight, Ban, EyeOff, BellOff, Bell, LogOut, Copy, UserCog, Info, 
 import { arrayRemove, updateDoc } from "firebase/firestore";
 import { PageHeader, dataDoc } from "./common";
 import { getPrefs, setPrefs, requestPermission, showNotice, enablePeriodicNews, registerSW } from "./notify";
+import { pushSupported, sendTestPush, syncPush, syncPushPrefs } from "./pushClient";
 
 const APP_VERSION = "2.0.0";
 
@@ -60,12 +61,16 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
   const unblock = (uid) => updateDoc(dataDoc(db, appId, "users", user.uid), { blockedUsers: arrayRemove(uid) }).then(() => showNotification?.("ブロックを解除しました")).catch(() => showNotification?.("エラーが発生しました"));
   const unhide = (uid) => updateDoc(dataDoc(db, appId, "users", user.uid), { hiddenFriends: arrayRemove(uid) }).then(() => showNotification?.("非表示を解除しました")).catch(() => showNotification?.("エラーが発生しました"));
 
+  const [testing, setTesting] = useState(false);
   const askNotif = async () => {
     if (typeof Notification === "undefined") return showNotification?.("このブラウザは通知に対応していません");
     await registerSW();
     const p = await requestPermission();
     setNotifPerm(p);
-    if (p === "granted") showNotice("通知をオンにしました", "テスト通知です。起動時に未読とニュースをお知らせします", { tag: "welcome" });
+    if (p === "granted") {
+      showNotice("通知をオンにしました", "テスト通知です。メッセージや着信をお知らせします", { tag: "welcome" });
+      syncPush(user);
+    }
     else if (p === "denied") showNotification?.("ブラウザの設定から通知を許可してください");
   };
   const [prefs, setPrefsState] = useState(getPrefs());
@@ -73,6 +78,20 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
     const next = setPrefs({ [key]: !prefs[key] });
     setPrefsState(next);
     if (key === "news") enablePeriodicNews(next.news);
+    syncPushPrefs(user); // サーバー側（アプリを閉じている間の通知）にも反映
+  };
+  const testPush = async () => {
+    setTesting(true);
+    try {
+      const r = await syncPush(user);
+      if (!r.ok) {
+        showNotification?.({ permission: "通知を許可してください", unsupported: "この端末は対応していません（iPhoneは「ホーム画面に追加」が必要）", server: "サーバーのVAPID鍵が未設定です（README参照）" }[r.reason] || "登録に失敗しました");
+      } else {
+        const d = await sendTestPush(user);
+        showNotification?.(d.ok ? "テスト通知を送りました。アプリを閉じて届くか確認してください" : "送信できませんでした");
+      }
+    } catch { showNotification?.("送信できませんでした"); }
+    setTesting(false);
   };
 
   const notifLabel = { granted: "許可済み", denied: "ブロック中", default: "未設定", unsupported: "非対応" }[notifPerm] || notifPerm;
@@ -99,6 +118,11 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
           <Row icon={Bell} label="ブラウザ通知" value={notifLabel} onClick={askNotif} />
           <Toggle label="起動時に通知" hint="アプリを開いたとき、未読メッセージと最新ニュースをお知らせ" on={prefs.launch} disabled={notifPerm !== "granted"} onClick={() => toggle("launch")} />
           <Toggle label="新着メッセージ" hint="アプリが裏にあるときに通知（ミュート中のトークは除く）" on={prefs.message} disabled={notifPerm !== "granted"} onClick={() => toggle("message")} />
+          <Toggle label="着信（通話）" hint="アプリを閉じていても、着信を通知し端末を振動させます" on={prefs.call} disabled={notifPerm !== "granted"} onClick={() => toggle("call")} />
+          <Toggle label="着信時の振動・着信音" hint="アプリを開いている間の着信で、振動と着信音を鳴らします" on={prefs.vibrate} onClick={() => toggle("vibrate")} />
+          <Toggle label="リマインダー" hint="設定した時刻に通知" on={prefs.reminder} disabled={notifPerm !== "granted"} onClick={() => toggle("reminder")} />
+          <Toggle label="通知に本文を表示" hint="オフにすると「新着メッセージがあります」とだけ表示" on={prefs.preview} disabled={notifPerm !== "granted"} onClick={() => toggle("preview")} />
+          <Row icon={Bell} label={testing ? "送信中…" : "テスト通知を送る"} value={pushSupported() ? "" : "非対応"} onClick={testing ? undefined : testPush} />
           <Toggle label="ニュース速報" hint="対応ブラウザではアプリを閉じていても定期的に確認" on={prefs.news} disabled={notifPerm !== "granted"} onClick={() => toggle("news")} />
           {mutedList.length === 0 && <div className="px-4 py-3 text-xs text-gray-400">ミュート中のトークはありません</div>}
           {mutedList.map((c) => (

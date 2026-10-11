@@ -1,6 +1,6 @@
 // サービス一覧（LINEの「サービス」タブ相当）
 import React from "react";
-import { Hash, Bookmark, CalendarDays, CloudSun, Sparkles, Store, Coins, Gamepad2, Cake, QrCode, Settings, Users, Newspaper, CreditCard } from "lucide-react";
+import { Hash, Bookmark, CalendarDays, CloudSun, Sparkles, Store, Coins, Gamepad2, Cake, QrCode, Settings, Users, Newspaper, CreditCard, BellRing, Languages, Banknote, BookOpen, Plug } from "lucide-react";
 import { PageHeader } from "./common";
 
 const SECTIONS = [
@@ -21,6 +21,16 @@ const SECTIONS = [
       { id: "weather", label: "天気", icon: CloudSun, color: "bg-sky-50 text-sky-500" },
       { id: "news", label: "ニュース", icon: Newspaper, color: "bg-indigo-50 text-indigo-500" },
       { id: "charge", label: "コインチャージ", icon: CreditCard, color: "bg-green-50 text-green-600" },
+      { id: "reminders", label: "リマインダー", icon: BellRing, color: "bg-amber-50 text-amber-600" },
+    ],
+  },
+  {
+    title: "外部サイト連携",
+    items: [
+      { id: "tools-translate", label: "翻訳", icon: Languages, color: "bg-blue-50 text-blue-600" },
+      { id: "tools-fx", label: "為替", icon: Banknote, color: "bg-lime-50 text-lime-600" },
+      { id: "tools-wiki", label: "Wikipedia", icon: BookOpen, color: "bg-slate-100 text-slate-600" },
+      { id: "integrations", label: "外部連携\n(Webhook)", icon: Plug, color: "bg-violet-50 text-violet-600" },
     ],
   },
   {
@@ -48,7 +58,7 @@ const ServicesView = ({ setView }) => (
             {s.items.map(({ id, label, icon: Icon, color }) => (
               <button key={id} onClick={() => setView(id)} className="flex flex-col items-center gap-2 active:scale-95 transition-transform">
                 <span className={`w-14 h-14 rounded-2xl flex items-center justify-center ${color}`}><Icon className="w-6 h-6" /></span>
-                <span className="text-[11px] font-bold text-gray-700 text-center leading-tight">{label}</span>
+                <span className="text-[11px] font-bold text-gray-700 text-center leading-tight whitespace-pre-line">{label}</span>
               </button>
             ))}
           </div>

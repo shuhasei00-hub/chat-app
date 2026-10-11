@@ -1,8 +1,46 @@
 // カレンダー（予定 + 友だちの誕生日）と ToDo
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Check, X, Cake } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Check, X, Cake, CalendarPlus, Download } from "lucide-react";
 import { addDoc, deleteDoc, onSnapshot, query, updateDoc, where, serverTimestamp } from "firebase/firestore";
 import { PageHeader, EmptyState, dataCol, dataDoc, ymd, toMillis } from "./common";
+import { ensurePushReady } from "./pushClient";
+
+// 通知タイミング（分前）
+const REMIND_OPTIONS = [["", "通知なし"], ["0", "予定の時刻"], ["10", "10分前"], ["60", "1時間前"], ["1440", "1日前"]];
+
+const startOf = (e) => new Date(`${e.date}T${e.time || "09:00"}`);
+const compact = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+const compactT = (d) => `${compact(d)}T${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}00`;
+
+// Googleカレンダーに追加するURL（外部サイト連携）
+const googleCalUrl = (e) => {
+  const st = startOf(e);
+  const dates = e.time ? `${compactT(st)}/${compactT(new Date(st.getTime() + 3600000))}` : `${compact(st)}/${compact(new Date(st.getTime() + 86400000))}`;
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(e.title)}&details=${encodeURIComponent(e.memo || "")}&dates=${dates}`;
+};
+
+// .ics ファイル（Apple / Outlook などのカレンダーに取り込める）
+const downloadIcs = (e) => {
+  const st = startOf(e);
+  const esc = (t) => String(t || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\n/g, "\\n");
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//chat-app//JA", "BEGIN:VEVENT", `UID:${e.id}@chat-app`, `DTSTAMP:${compactT(new Date())}`,
+    e.time ? `DTSTART:${compactT(st)}` : `DTSTART;VALUE=DATE:${compact(st)}`,
+    e.time ? `DTEND:${compactT(new Date(st.getTime() + 3600000))}` : `DTEND;VALUE=DATE:${compact(new Date(st.getTime() + 86400000))}`,
+    `SUMMARY:${esc(e.title)}`, ...(e.memo ? [`DESCRIPTION:${esc(e.memo)}`] : []), "END:VEVENT", "END:VCALENDAR"];
+  const url = URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = `${(e.title || "event").slice(0, 30)}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const reminderApi = async (user, body) => {
+  const token = await user.getIdToken();
+  const res = await fetch("/api/reminders", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "通知の登録に失敗しました");
+  return data;
+};
 
 const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -14,7 +52,7 @@ const CalendarView = ({ user, profile, allUsers, db, appId, setView, showNotific
   const [events, setEvents] = useState([]);
   const [todos, setTodos] = useState([]);
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ title: "", time: "", memo: "" });
+  const [form, setForm] = useState({ title: "", time: "", memo: "", remind: "" });
   const [todoText, setTodoText] = useState("");
 
   useEffect(() => {
@@ -56,11 +94,25 @@ const CalendarView = ({ user, profile, allUsers, db, appId, setView, showNotific
   const addEvent = async () => {
     if (!form.title.trim()) return showNotification?.("タイトルを入力してください");
     try {
+      // 通知: 予定の日時（時刻なしなら9:00）の N 分前にプッシュ通知（サーバーのCronが送信）
+      let reminderId = "";
+      let note = "";
+      if (form.remind !== "") {
+        const at = new Date(`${selected}T${form.time || "09:00"}`).getTime() - Number(form.remind) * 60000;
+        if (at < Date.now()) note = "（通知の時刻が過ぎているため、通知は登録していません）";
+        else {
+          try {
+            await ensurePushReady(user);
+            reminderId = (await reminderApi(user, { action: "create", text: `${form.time || "終日"} ${form.title.trim()}`, dueAt: at, url: "/?open=calendar" })).id;
+          } catch (err) { note = `（${err.message}）`; }
+        }
+      }
       await addDoc(dataCol(db, appId, "events"), {
-        ownerUid: user.uid, title: form.title.trim(), date: selected, time: form.time || "", memo: form.memo.trim(), createdAt: serverTimestamp(),
+        ownerUid: user.uid, title: form.title.trim(), date: selected, time: form.time || "", memo: form.memo.trim(), reminderId, createdAt: serverTimestamp(),
       });
+      if (note) showNotification?.("予定を保存しました" + note);
       setModal(false);
-      setForm({ title: "", time: "", memo: "" });
+      setForm({ title: "", time: "", memo: "", remind: "" });
     } catch (e) {
       showNotification?.("保存に失敗しました");
     }
@@ -140,7 +192,9 @@ const CalendarView = ({ user, profile, allUsers, db, appId, setView, showNotific
                   <div className="text-sm font-bold break-words">{e.title}</div>
                   {e.memo && <div className="text-xs text-gray-500 whitespace-pre-wrap break-words">{e.memo}</div>}
                 </div>
-                <button onClick={() => window.confirm("この予定を削除しますか？") && deleteDoc(dataDoc(db, appId, "events", e.id))} className="p-1 text-gray-300 hover:text-red-500" aria-label="削除">
+                <a href={googleCalUrl(e)} target="_blank" rel="noopener noreferrer" className="p-1 text-gray-300 hover:text-blue-500" aria-label="Googleカレンダーに追加" title="Googleカレンダーに追加"><CalendarPlus className="w-4 h-4" /></a>
+                <button onClick={() => downloadIcs(e)} className="p-1 text-gray-300 hover:text-blue-500" aria-label=".icsを保存" title=".icsを保存（他のカレンダーに取り込み）"><Download className="w-4 h-4" /></button>
+                <button onClick={() => { if (!window.confirm("この予定を削除しますか？")) return; if (e.reminderId) reminderApi(user, { action: "delete", id: e.reminderId }).catch(() => {}); deleteDoc(dataDoc(db, appId, "events", e.id)); }} className="p-1 text-gray-300 hover:text-red-500" aria-label="削除">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -177,6 +231,9 @@ const CalendarView = ({ user, profile, allUsers, db, appId, setView, showNotific
             <div className="font-bold">{selected.replaceAll("-", "/")} の予定</div>
             <input autoFocus value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="タイトル" className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm outline-none" />
             <input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm outline-none" />
+            <select value={form.remind} onChange={(e) => setForm({ ...form, remind: e.target.value })} className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm outline-none">
+              {REMIND_OPTIONS.map(([v, l]) => <option key={v} value={v}>{v === "" ? "通知: なし" : `通知: ${l}`}</option>)}
+            </select>
             <textarea value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} rows={2} placeholder="メモ（任意）" className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm outline-none resize-none" />
             <div className="flex gap-2">
               <button onClick={() => setModal(false)} className="flex-1 py-3 rounded-xl bg-gray-100 font-bold text-sm text-gray-600">キャンセル</button>

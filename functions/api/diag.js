@@ -13,6 +13,10 @@ export const onRequestGet = ({ env, request }) =>
       FIREBASE_SERVICE_ACCOUNT: !!env.FIREBASE_SERVICE_ACCOUNT,
       FIREBASE_PROJECT_ID: env.FIREBASE_PROJECT_ID || "(既定 chat-app-c17bf)",
       APP_ID: env.APP_ID || "(既定 messenger-app-v9-integrated)",
+      VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
+      VAPID_SUBJECT: env.VAPID_SUBJECT || "(未設定 → mailto:admin@example.com)",
     },
+    push: { enabled: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.FIREBASE_SERVICE_ACCOUNT) },
     providers: listProviders(env).map((p) => ({ id: p.id, name: p.name, enabled: p.enabled, methods: p.methods })),
   });

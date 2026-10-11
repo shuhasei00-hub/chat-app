@@ -28,5 +28,37 @@
       "type": "image/svg+xml",
       "purpose": "maskable"
     }
+  ],
+  "id": "/",
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "share_title",
+      "text": "share_text",
+      "url": "share_url"
+    }
+  },
+  "shortcuts": [
+    {
+      "name": "リマインダー",
+      "url": "/?open=reminders",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "ニュース",
+      "url": "/?open=news",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

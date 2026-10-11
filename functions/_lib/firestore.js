@@ -68,7 +68,7 @@ const fromValue = (v) => {
 };
 export const fromFields = (f) => Object.fromEntries(Object.entries(f || {}).map(([k, v]) => [k, fromValue(v)]));
 
-const call = async (env, path, init = {}) => {
+export const call = async (env, path, init = {}) => {
   const res = await fetch(`https://firestore.googleapis.com/v1/${path}`, {
     ...init,
     headers: { authorization: `Bearer ${await accessToken(env)}`, "content-type": "application/json" },
@@ -133,3 +133,51 @@ export const patchDoc = (env, segs, data, updateTime) =>
     updateMask: { fieldPaths: Object.keys(data) },
     ...(updateTime ? { currentDocument: { updateTime } } : { currentDocument: { exists: true } }),
   }]);
+
+// ---------------------------------------------------------------------------
+// サーバー専用領域: artifacts/{appId}/server/data/...
+//   Firestoreルールにこのパスを許可する記述が無いため、ブラウザからは読み書きできません
+//   （プッシュ購読・Webhookのトークン・リマインダーなど、他人に見せたくない情報用）。
+// ---------------------------------------------------------------------------
+export const serverDocName = (env, ...segs) => `${root(env)}/artifacts/${appId(env)}/server/data/${segs.join("/")}`;
+
+// Firestore のフィールドパス用に、識別子でないセグメントをバッククォートで囲む
+export const fieldPath = (...segs) => segs.map((s) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s) ? s : "`" + String(s).replace(/[`\\]/g, "\\$&") + "`")).join(".");
+
+export const getServerDoc = async (env, ...segs) => {
+  const r = await call(env, serverDocName(env, ...segs));
+  if (r.status === 404) return null;
+  if (!r.ok) throw new HttpError(500, "Firestore読込失敗: " + (r.data?.error?.message || r.status));
+  return { ...fromFields(r.data.fields), __updateTime: r.data.updateTime };
+};
+
+// 指定フィールドだけを上書き（ドキュメントが無ければ作成）。mask に無いフィールドは触らない
+export const mergeServerDoc = (env, segs, data) =>
+  commit(env, [{
+    update: { name: serverDocName(env, ...segs), fields: toFields(data) },
+    updateMask: { fieldPaths: Object.keys(data).map((k) => fieldPath(k)) },
+  }]);
+
+export const setServerDoc = (env, segs, data) =>
+  commit(env, [{ update: { name: serverDocName(env, ...segs), fields: toFields(data) } }]);
+
+export const deleteServerDoc = (env, ...segs) =>
+  commit(env, [{ delete: serverDocName(env, ...segs) }]);
+
+const OPS = { eq: "EQUAL", lte: "LESS_THAN_OR_EQUAL", gte: "GREATER_THAN_OR_EQUAL", lt: "LESS_THAN", gt: "GREATER_THAN" };
+
+// 単一フィールドの比較だけ（複合インデックス不要）。戻り値の __id はドキュメントID
+export const queryServer = async (env, collectionId, { field, op = "eq", value, orderBy, limit = 100 }) => {
+  const parent = `${root(env)}/artifacts/${appId(env)}/server/data`;
+  const structuredQuery = {
+    from: [{ collectionId }],
+    where: { fieldFilter: { field: { fieldPath: field }, op: OPS[op], value: toValue(value) } },
+    limit,
+  };
+  if (orderBy) structuredQuery.orderBy = [{ field: { fieldPath: orderBy }, direction: "ASCENDING" }];
+  const r = await call(env, `${parent}:runQuery`, { method: "POST", body: JSON.stringify({ structuredQuery }) });
+  if (!r.ok) throw new HttpError(500, "Firestore検索失敗: " + (r.data?.error?.message || r.status));
+  return (Array.isArray(r.data) ? r.data : [])
+    .filter((x) => x.document)
+    .map((x) => ({ ...fromFields(x.document.fields), __id: x.document.name.split("/").pop(), __name: x.document.name }));
+};

@@ -21,3 +21,11 @@ KOMOJU_PAYMENT_TYPES=konbini,pay_easy
 # ダッシュボード > 店舗 > アプリトークン の「シークレット」と「トークン(JWT)」
 UNIVAPAY_SECRET=
 UNIVAPAY_APP_TOKEN=
+
+# --- ④ プッシュ通知（アプリを閉じていてもメッセージ/着信/リマインダーが届く）---
+# 鍵は `npm run vapid` で生成できます。PUBLIC は公開してよい値、PRIVATE は秘密（シークレットに登録）。
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:あなたのメールアドレス
+# （任意）Chrome/Firefox/Safari/Edge 以外のプッシュサービスを使う場合のみ、許可するホスト名の末尾をカンマ区切りで
+# PUSH_ENDPOINT_ALLOW=

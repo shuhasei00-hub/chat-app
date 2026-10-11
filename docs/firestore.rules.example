@@ -10,6 +10,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // サーバー専用領域（プッシュ購読・Webhookトークン・リマインダー）: artifacts/{appId}/server/data/...
+    // 上のルールに一致しないため、ブラウザからは読み書きできません（サーバーはサービスアカウントで管理者権限）。
+    // ★ ここを許可するルール（例: match /{document=**} で全許可）を足さないでください。購読情報やWebhookのURLが漏れます。
+
     // 既存アプリと追加機能（keep / events / todos / wallet_tx / オープンチャット）は
     // すべて artifacts/{appId}/public/data/ 配下に保存されます。
     // 最低限、サインイン済みユーザーに読み書きを許可すれば動作します。

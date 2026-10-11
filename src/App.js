@@ -14,6 +14,12 @@ import DevToolsView from "./line/DevToolsView";
 import { LaunchNotifier, notifyNewMessage, takePendingView } from "./line/notify";
 import BottomNav, { NAV_VIEWS } from "./line/BottomNav";
 import { BlockButton } from "./line/common";
+import RemindersView from "./line/RemindersView";
+import IntegrationsView from "./line/IntegrationsView";
+import ToolsView from "./line/ToolsView";
+import { LinkPreview, TranslateBox } from "./line/MessageExtras";
+import { pushNotify, syncPushPrefs, unsubscribePush, closeCallNotification, closeChatNotifications } from "./line/pushClient";
+import { useRing, stopRing } from "./line/ring";
 import { LocationCard, LocationSendModal, PollCard, PollCreateModal, ChatPlusItems } from "./line/ChatExtras";
 import { initializeApp } from "firebase/app";
 import {
@@ -1960,6 +1966,7 @@ const LeaveGroupConfirmModal = ({ onClose, onLeave }) => /* @__PURE__ */ jsx("di
   ] })
 ] }) });
 const IncomingCallOverlay = ({ callData, onAccept, onDecline, allUsers }) => {
+  useRing("incoming");
   const caller = allUsers.find((u) => u.uid === callData.callerId);
   const isVideo = callData?.callType !== "audio";
   return /* @__PURE__ */ jsxs("div", { className: "fixed inset-0 z-[500] bg-gray-900 flex flex-col items-center justify-between py-16 px-6 animate-in fade-in duration-300", children: [
@@ -2010,7 +2017,11 @@ const IncomingCallOverlay = ({ callData, onAccept, onDecline, allUsers }) => {
     ] })
   ] });
 };
-const OutgoingCallOverlay = ({ callData, onCancel, allUsers }) => /* @__PURE__ */ jsxs("div", { className: "fixed inset-0 z-[500] bg-gray-900 flex flex-col items-center justify-between py-24 px-6 animate-in fade-in duration-300", children: [
+const OutgoingCallOverlay = (props) => {
+  useRing("outgoing");
+  return /* @__PURE__ */ jsx(OutgoingCallOverlayBody, props);
+};
+const OutgoingCallOverlayBody = ({ callData, onCancel, allUsers }) => /* @__PURE__ */ jsxs("div", { className: "fixed inset-0 z-[500] bg-gray-900 flex flex-col items-center justify-between py-24 px-6 animate-in fade-in duration-300", children: [
   /* @__PURE__ */ jsxs("div", { className: "flex flex-col items-center gap-6 mt-10", children: [
     /* @__PURE__ */ jsxs("div", { className: "relative", children: [
       /* @__PURE__ */ jsx("div", { className: "absolute inset-0 rounded-full bg-white/10 animate-pulse" }),
@@ -2146,6 +2157,7 @@ const MessageItem = React.memo(({ m, user, sender, isGroup, db: db2, appId: appI
   const [loading, setLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [showTranslate, setShowTranslate] = useState(false);
   const isInvalidBlob = !isMe && m.content?.startsWith("blob:");
   const base64ToBlobUrl = async (base64Data, mimeType) => {
     try {
@@ -2347,7 +2359,7 @@ const MessageItem = React.memo(({ m, user, sender, isGroup, db: db2, appId: appI
       isTodayBirthday(sender?.birthday) && /* @__PURE__ */ jsx("span", { className: "absolute -top-1 -right-1 text-[8px]", children: "\u{1F382}" })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: `flex flex-col ${isMe ? "items-end" : "items-start"} max-w-[75%]`, children: [
-      !isMe && isGroup && /* @__PURE__ */ jsx("div", { className: "text-[9px] text-gray-600 font-bold mb-1 ml-1 cursor-pointer hover:underline", onClick: () => onShowProfile && onShowProfile(sender), children: sender?.name }),
+      !isMe && (isGroup || sender?.isBot) && /* @__PURE__ */ jsx("div", { className: "text-[9px] text-gray-600 font-bold mb-1 ml-1 cursor-pointer hover:underline", onClick: () => onShowProfile && onShowProfile(sender), children: sender?.name }),
       /* @__PURE__ */ jsx("div", { className: "relative", children: /* @__PURE__ */ jsxs("div", { onClick: handleBubbleClick, className: `p-1.5 px-2.5 rounded-[18px] text-[11px] shadow-sm relative cursor-pointer ${m.type === "sticker" ? "bg-transparent shadow-none p-0" : isMe ? "bg-[#76ff03] text-black" : "bg-white text-black"} ${["image", "video", "call_invite"].includes(m.type) ? "p-0 bg-transparent shadow-none" : ""}`, children: [
         m.replyTo && m.type !== "sticker" && /* @__PURE__ */ jsxs("div", { className: `mb-2 p-2 rounded-lg border-l-4 text-xs opacity-70 ${isMe ? "bg-black/5 border-white/50" : "bg-gray-100 border-gray-300"}`, children: [
           /* @__PURE__ */ jsx("div", { className: "font-bold text-[10px] mb-0.5", children: m.replyTo.senderName }),
@@ -2359,6 +2371,8 @@ const MessageItem = React.memo(({ m, user, sender, isGroup, db: db2, appId: appI
         ] }),
         m.type === "text" && /* @__PURE__ */ jsxs("div", { className: "whitespace-pre-wrap", children: [
           renderContent(m.content),
+          /* @__PURE__ */ jsx(LinkPreview, { text: m.content }),
+          showTranslate && /* @__PURE__ */ jsx(TranslateBox, { text: m.content, onClose: () => setShowTranslate(false) }),
           m.isEdited && /* @__PURE__ */ jsx("div", { className: "text-[9px] text-black/40 text-right mt-1 font-bold", children: "(\u7DE8\u96C6\u6E08)" })
         ] }),
         m.type === "call_invite" && /* @__PURE__ */ jsxs("div", { className: "bg-white border rounded-2xl p-4 w-64 shadow-sm flex flex-col items-center gap-2", children: [
@@ -2450,6 +2464,11 @@ const MessageItem = React.memo(({ m, user, sender, isGroup, db: db2, appId: appI
             /* @__PURE__ */ jsx(Download, { className: "w-4 h-4" }),
             "\u4FDD\u5B58"
           ] }),
+          m.type === "text" && /* @__PURE__ */ jsx("button", { onClick: (e) => {
+            e.stopPropagation();
+            setShowTranslate(true);
+            setShowMenu(false);
+          }, className: "flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-xs font-bold text-gray-700 text-left border-t border-gray-100", children: "\u{1F310} \u7FFB\u8A33" }),
           m.type === "text" && isMe && /* @__PURE__ */ jsxs("button", { onClick: (e) => {
             e.stopPropagation();
             onEdit(m.id, m.content);
@@ -4717,6 +4736,7 @@ const ChatRoomView = ({ user, profile, allUsers, chats, activeChatId, setActiveC
   }, [user.uid]);
   useEffect(() => {
     isFirstLoad.current = true;
+    if (activeChatId) closeChatNotifications(activeChatId);
   }, [activeChatId]);
   useEffect(() => {
     if (!activeChatId) return;
@@ -4848,7 +4868,7 @@ const ChatRoomView = ({ user, profile, allUsers, chats, activeChatId, setActiveC
       const fileData = file ? { fileName: file.name, fileSize: file.size, mimeType: file.type } : {};
       const currentChat = chats.find((c) => c.id === activeChatId);
       const updateData = {
-        lastMessage: { content: type === "text" ? content : { location: "📍 位置情報", poll: "📊 投票" }[type] || `[${type}]`, senderId: user.uid, readBy: [user.uid] },
+        lastMessage: { content: type === "text" ? content : { location: "📍 位置情報", poll: "📊 投票", image: "📷 写真", video: "🎥 動画", audio: "🎤 ボイスメッセージ", file: "📎 ファイル", sticker: "スタンプを送信しました" }[type] || `[${type}]`, type, senderId: user.uid, readBy: [user.uid], createdAt: serverTimestamp() },
         updatedAt: serverTimestamp()
       };
       if (currentChat) {
@@ -4866,6 +4886,7 @@ const ChatRoomView = ({ user, profile, allUsers, chats, activeChatId, setActiveC
         }
         await setDoc(newMsgRef, { senderId: user.uid, content: storedContent, type, preview: previewData, ...additionalData, ...replyData, ...fileData, hasChunks: false, chunkCount: 0, isUploading: true, createdAt: serverTimestamp(), readBy: [user.uid] });
         await updateDoc(doc(db2, "artifacts", appId2, "public", "data", "chats", activeChatId), updateData);
+        pushNotify(user, { kind: "message", chatId: activeChatId });
         setText("");
         setPlusMenuOpen(false);
         setContactModalOpen(false);
@@ -4927,6 +4948,7 @@ const ChatRoomView = ({ user, profile, allUsers, chats, activeChatId, setActiveC
             await setDoc(newMsgRef, { senderId: user.uid, content: storedContent, type, ...additionalData, ...replyData, ...fileData, hasChunks, chunkCount, createdAt: serverTimestamp(), readBy: [user.uid] });
           }
           await updateDoc(doc(db2, "artifacts", appId2, "public", "data", "chats", activeChatId), updateData);
+          pushNotify(user, { kind: "message", chatId: activeChatId });
           setText("");
           setPlusMenuOpen(false);
           setContactModalOpen(false);
@@ -5225,8 +5247,8 @@ const ChatRoomView = ({ user, profile, allUsers, chats, activeChatId, setActiveC
         " \u4EE5\u524D\u306E\u30E1\u30C3\u30BB\u30FC\u30B8\u3092\u8AAD\u307F\u8FBC\u3080"
       ] }) }),
       messages.filter((m) => !(profile?.blockedUsers || []).includes(m.senderId)).map((m) => {
-        const sender = allUsers.find((u) => u.uid === m.senderId);
-        return /* @__PURE__ */ jsx(MessageItem, { m, user, sender, isGroup, db: db2, appId: appId2, chatId: activeChatId, addFriendById, onEdit: handleEditMessage, onDelete: handleDeleteMessage, onPreview: handlePreviewMedia, onReply: setReplyTo, onReaction: handleReaction, allUsers, onStickerClick, onShowProfile: setViewProfile, onJoinCall: handleJoinCall }, m.id);
+        const sender = allUsers.find((u) => u.uid === m.senderId) || (m.isBot ? { uid: m.senderId, name: m.senderName || "外部連携", avatar: m.senderAvatar || "", isBot: true } : void 0);
+        return /* @__PURE__ */ jsx(MessageItem, { m, user, sender, isGroup, db: db2, appId: appId2, chatId: activeChatId, addFriendById, onEdit: handleEditMessage, onDelete: handleDeleteMessage, onPreview: handlePreviewMedia, onReply: setReplyTo, onReaction: handleReaction, allUsers, onStickerClick, onShowProfile: (u) => { if (!u?.isBot) setViewProfile(u); }, onJoinCall: handleJoinCall }, m.id);
       }),
       /* @__PURE__ */ jsx("div", { ref: scrollRef, className: "h-2 w-full" })
     ] }),
@@ -7748,6 +7770,9 @@ function App() {
   const [activeEffect, setActiveEffect] = useState("Normal");
   const [currentChatBackground, setCurrentChatBackground] = useState(null);
   const processedMsgIds = useRef(/* @__PURE__ */ new Set());
+  useEffect(() => {
+    if (user) syncPushPrefs(user); // ミュート中のトークをサーバーにも反映（アプリを閉じている間の通知に効かせる）
+  }, [mutedChats, user?.uid]);
   const toggleMuteChat = (chatId) => {
     setMutedChats((prev) => {
       const next = prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId];
@@ -8200,6 +8225,7 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
           timestamp: Date.now()
         }
       });
+      pushNotify(user, { kind: "call", chatId });
 
       const sessionRef = doc(db, "artifacts", appId, "public", "data", "chats", chatId, "group_calls", sessionId);
       await setDoc(sessionRef, { sessionId, callType, hostId: user.uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
@@ -8246,6 +8272,7 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
           timestamp: Date.now()
         }
       });
+      pushNotify(user, { kind: "call", chatId });
       setActiveCall({
         chatId,
         callData: { status: "ringing", callerId: user.uid, callType, sessionId },
@@ -8262,6 +8289,11 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
 };
   const endCall = async (chatId, callData, { clearStatus = true } = {}) => {
   const isGroup = !!(activeCall && activeCall.chatId === chatId && activeCall.isGroupCall);
+  stopRing();
+  closeCallNotification(chatId);
+  if (!isGroup && callData?.status === "ringing" && callData?.callerId === user.uid && callData?.sessionId) {
+    pushNotify(user, { kind: "missed", chatId, sessionId: callData.sessionId }); // 相手に「不在着信」を通知
+  }
   try {
     if (isGroup) {
       const sessionId = callData?.sessionId || activeCall?.callData?.sessionId || null;
@@ -8281,6 +8313,8 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
   }
 };  const acceptIncomingCall = async () => {
     if (!activeCall) return;
+    stopRing();
+    closeCallNotification(activeCall.chatId);
     try {
       const callData = activeCallChat?.callStatus || activeCall.callData || {};
       const nextCallData = {
@@ -8395,7 +8429,10 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
         view === "calendar" && /* @__PURE__ */ jsx(CalendarView, { user, profile, allUsers, db, appId, setView, showNotification }),
         view === "weather" && /* @__PURE__ */ jsx(WeatherView, { setView, showNotification }),
         view === "fortune" && /* @__PURE__ */ jsx(FortuneView, { user, setView }),
-        view === "settings" && /* @__PURE__ */ jsx(SettingsView, { user, profile, allUsers, chats, setView, mutedChats, toggleMuteChat, onLogout: () => signOut(auth), db, appId, showNotification }),
+        view === "settings" && /* @__PURE__ */ jsx(SettingsView, { user, profile, allUsers, chats, setView, mutedChats, toggleMuteChat, onLogout: async () => { await unsubscribePush(user); signOut(auth); }, db, appId, showNotification }),
+        view === "reminders" && /* @__PURE__ */ jsx(RemindersView, { user, setView, showNotification }),
+        view === "integrations" && /* @__PURE__ */ jsx(IntegrationsView, { user, chats, allUsers, setView, showNotification }),
+        (view === "tools-translate" || view === "tools-fx" || view === "tools-wiki") && /* @__PURE__ */ jsx(ToolsView, { tab: view.slice(6), setView, showNotification }),
         view === "pachinko" && /* @__PURE__ */ jsx(PachinkoView, { user, profile, onBack: () => setView("home"), showNotification }),
         view === "minigame" && /* @__PURE__ */ jsx(ShootingMiniGameView, { user, invite: miniGameInvite, onBack: () => { setView("home"); setMiniGameInvite(null); setMiniGameInviteFrom(null); }, showNotification })
       ] }),
@@ -8433,7 +8470,7 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
           /* @__PURE__ */ jsx("button", { className: "flex-1 py-4 bg-green-500 text-white rounded-2xl font-bold", onClick: () => addFriendById(searchQuery), children: "\u8FFD\u52A0" })
         ] })
       ] }) }),
-      user && /* @__PURE__ */ jsx(LaunchNotifier, { user, chats, mutedChats, setView }),
+      user && /* @__PURE__ */ jsx(LaunchNotifier, { user, chats, mutedChats, setView, setActiveChatId, allUsers, db, appId, showNotification }),
       user && /* @__PURE__ */ jsx(PaymentWatcher, { user, db, appId, setView, showNotification }),
       user && !activeCall && NAV_VIEWS.includes(view) && /* @__PURE__ */ jsx(BottomNav, {
         view,

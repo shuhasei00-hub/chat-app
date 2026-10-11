@@ -10,5 +10,7 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
+  // 毎分実行: リマインダー通知の送信に使います（無料プランでも利用可）
+  "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true }
 }
