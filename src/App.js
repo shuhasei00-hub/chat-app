@@ -9,6 +9,8 @@ import OpenChatView from "./line/OpenChatView";
 import WalletView from "./line/WalletView";
 import SettingsView from "./line/SettingsView";
 import ServicesView from "./line/ServicesView";
+import ChargeView, { PaymentWatcher } from "./line/ChargeView";
+import { LaunchNotifier, notifyNewMessage, takePendingView } from "./line/notify";
 import BottomNav, { NAV_VIEWS } from "./line/BottomNav";
 import { BlockButton } from "./line/common";
 import { LocationCard, LocationSendModal, PollCard, PollCreateModal, ChatPlusItems } from "./line/ChatExtras";
@@ -7802,7 +7804,7 @@ function App() {
           await setDoc(doc(db, "artifacts", appId, "public", "data", "users", u.uid), initialProfile);
           setProfile(initialProfile);
         }
-        setView("home");
+        setView(takePendingView() || "home");
       } else {
         setUser(null);
         setProfile(null);
@@ -7925,6 +7927,7 @@ const loadMorePosts = async () => {
             const msgUniqueKey = `${change.doc.id}_${msgTime}`;
             if (now - msgTime < 1e4 && !processedMsgIds.current.has(msgUniqueKey)) {
               playNotificationSound();
+              notifyNewMessage(change.doc.id, data, lastMsg);
               processedMsgIds.current.add(msgUniqueKey);
             }
           }
@@ -8384,6 +8387,7 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
         view === "news" && /* @__PURE__ */ jsx(NewsView, { user, db, appId, showNotification }),
         view === "wallet" && /* @__PURE__ */ jsx(WalletView, { user, profile, allUsers, chats, db, appId, setView, showNotification }),
         view === "services" && /* @__PURE__ */ jsx(ServicesView, { setView }),
+        view === "charge" && /* @__PURE__ */ jsx(ChargeView, { user, db, appId, setView, showNotification }),
         view === "openchat" && /* @__PURE__ */ jsx(OpenChatView, { user, profile, db, appId, setView, setActiveChatId, showNotification }),
         view === "keep" && /* @__PURE__ */ jsx(KeepView, { user, db, appId, setView, showNotification }),
         view === "calendar" && /* @__PURE__ */ jsx(CalendarView, { user, profile, allUsers, db, appId, setView, showNotification }),
@@ -8427,6 +8431,8 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
           /* @__PURE__ */ jsx("button", { className: "flex-1 py-4 bg-green-500 text-white rounded-2xl font-bold", onClick: () => addFriendById(searchQuery), children: "\u8FFD\u52A0" })
         ] })
       ] }) }),
+      user && /* @__PURE__ */ jsx(LaunchNotifier, { user, chats, mutedChats, setView }),
+      user && /* @__PURE__ */ jsx(PaymentWatcher, { user, db, appId, setView, showNotification }),
       user && !activeCall && NAV_VIEWS.includes(view) && /* @__PURE__ */ jsx(BottomNav, {
         view,
         setView,

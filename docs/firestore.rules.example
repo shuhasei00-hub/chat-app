@@ -1,6 +1,15 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 決済の記録(payments)は本人だけが読め、書き込みはサーバー(Cloudflare Functions)だけ。
+    // ※ この match は下のワイルドカードより「具体的」ですが、Firestoreルールは OR 評価なので、
+    //   ワイルドカードの write を許可したままだと payments にも書けてしまいます。
+    //   本番では下のワイルドカードを外し、コレクションごとに定義してください。
+    match /artifacts/{appId}/public/data/payments/{id} {
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
     // 既存アプリと追加機能（keep / events / todos / wallet_tx / オープンチャット）は
     // すべて artifacts/{appId}/public/data/ 配下に保存されます。
     // 最低限、サインイン済みユーザーに読み書きを許可すれば動作します。
@@ -12,3 +21,5 @@ service cloud.firestore {
 // 注意: ルールは複数の match が一致すると OR で評価されます。
 // コレクションごとに厳しくする場合は、上のワイルドカードを外して
 // すべてのコレクション（users, chats, posts, ...）を個別に定義してください。
+// 特に users/{uid}.wallet をクライアントから自由に書き換えられる状態は、
+// 実際のお金と連動させるなら必ず塞ぐ必要があります（README「注意点」参照）。

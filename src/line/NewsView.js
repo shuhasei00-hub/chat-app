@@ -3,32 +3,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Newspaper, RefreshCw, ExternalLink, Bookmark } from "lucide-react";
 import { addDoc, serverTimestamp } from "firebase/firestore";
 import { PageHeader, EmptyState, Spinner, dataCol, timeAgo } from "./common";
-
-const BASE = "https://news.yahoo.co.jp/rss/topics";
-const FEEDS = [
-  { id: "top", label: "主要", url: `${BASE}/top-picks.xml` },
-  { id: "domestic", label: "国内", url: `${BASE}/domestic.xml` },
-  { id: "world", label: "国際", url: `${BASE}/world.xml` },
-  { id: "business", label: "経済", url: `${BASE}/business.xml` },
-  { id: "entertainment", label: "エンタメ", url: `${BASE}/entertainment.xml` },
-  { id: "sports", label: "スポーツ", url: `${BASE}/sports.xml` },
-  { id: "it", label: "IT", url: `${BASE}/it.xml` },
-  { id: "science", label: "科学", url: `${BASE}/science.xml` },
-  { id: "local", label: "地域", url: `${BASE}/local.xml` },
-];
-
-const cache = new Map(); // feedId -> { at, items }
-const TTL = 60 * 1000;
-
-const parseRss = (xmlText) => {
-  const doc = new DOMParser().parseFromString(xmlText, "text/xml");
-  if (doc.querySelector("parsererror")) throw new Error("parse");
-  return Array.from(doc.querySelectorAll("item")).map((it) => {
-    const get = (tag) => it.querySelector(tag)?.textContent?.trim() || "";
-    const pub = get("pubDate");
-    return { title: get("title"), link: get("link"), at: pub ? new Date(pub).getTime() : 0 };
-  }).filter((x) => x.title && x.link);
-};
+import { FEEDS, fetchNews } from "./newsApi";
 
 const NewsView = ({ user, db, appId, showNotification }) => {
   const [feedId, setFeedId] = useState("top");
@@ -37,22 +12,10 @@ const NewsView = ({ user, db, appId, showNotification }) => {
   const [error, setError] = useState(false);
 
   const load = useCallback(async (id, force = false) => {
-    const feed = FEEDS.find((f) => f.id === id);
-    const hit = cache.get(id);
-    if (!force && hit && Date.now() - hit.at < TTL) {
-      setItems(hit.items);
-      setLoading(false);
-      setError(false);
-      return;
-    }
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch(`/api/news?url=${encodeURIComponent(feed.url)}`);
-      if (!res.ok) throw new Error(`http ${res.status}`);
-      const next = parseRss(await res.text());
-      cache.set(id, { at: Date.now(), items: next });
-      setItems(next);
+      setItems(await fetchNews(id, force));
     } catch (e) {
       console.error("news", e);
       setItems([]);
@@ -102,7 +65,7 @@ const NewsView = ({ user, db, appId, showNotification }) => {
           <EmptyState
             icon={<Newspaper className="w-10 h-10" />}
             title="ニュースを取得できませんでした"
-            hint="Cloudflare Pages にデプロイした環境（/api/news）で表示されます。ローカルでは npx wrangler pages dev を使ってください。"
+            hint="通信状況を確認して、右上の更新ボタンをもう一度押してください。"
           />
         )}
         {!loading && !error && items.length === 0 && <EmptyState title="記事がありません" />}

@@ -1,6 +1,6 @@
 // ウォレット（コインの残高 / 送金 / 履歴 / ログインボーナス）
 import React, { useEffect, useMemo, useState } from "react";
-import { Send, Gift, ArrowUpRight, ArrowDownLeft, Coins, Loader2 } from "lucide-react";
+import { Send, Gift, ArrowUpRight, ArrowDownLeft, Coins, Loader2, CreditCard } from "lucide-react";
 import { doc, increment, limit, onSnapshot, query, runTransaction, serverTimestamp, where } from "firebase/firestore";
 import { PageHeader, EmptyState, dataCol, dataDoc, toMillis, formatDateTime, ymd, DAILY_BONUS } from "./common";
 
@@ -93,6 +93,7 @@ const WalletView = ({ user, profile, allUsers, chats, db, appId, setView, showNo
           <div className="text-xs opacity-80 flex items-center gap-1"><Coins className="w-4 h-4" />コイン残高</div>
           <div className="text-4xl font-black mt-1">{Number(balance).toLocaleString()}</div>
           <div className="flex gap-3 mt-5">
+            <button onClick={() => setView("charge")} className="flex-1 bg-white text-green-600 rounded-2xl py-3 text-sm font-bold flex items-center justify-center gap-2"><CreditCard className="w-4 h-4" />チャージ</button>
             <button onClick={() => setSendOpen(true)} className="flex-1 bg-white/20 hover:bg-white/30 rounded-2xl py-3 text-sm font-bold flex items-center justify-center gap-2"><Send className="w-4 h-4" />送る</button>
             <button disabled={busy || bonusDone} onClick={claimBonus} className="flex-1 bg-white/20 hover:bg-white/30 disabled:opacity-50 rounded-2xl py-3 text-sm font-bold flex items-center justify-center gap-2">
               <Gift className="w-4 h-4" />{bonusDone ? "受取済み" : `ボーナス +${DAILY_BONUS}`}
@@ -105,7 +106,7 @@ const WalletView = ({ user, profile, allUsers, chats, db, appId, setView, showNo
           {txs.length === 0 && <EmptyState title="履歴はまだありません" />}
           {txs.map((t) => {
             const out = t.fromUid === user.uid && t.type === "transfer";
-            const label = t.type === "bonus" ? "ログインボーナス" : out ? `${nameOf(t.toUid)}さんへ送金` : `${nameOf(t.fromUid)}さんから受取`;
+            const label = t.type === "topup" ? "コインチャージ" : t.type === "bonus" ? "ログインボーナス" : out ? `${nameOf(t.toUid)}さんへ送金` : `${nameOf(t.fromUid)}さんから受取`;
             return (
               <div key={t.id} className="flex items-center gap-3 px-4 py-3">
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center ${out ? "bg-red-50 text-red-400" : "bg-green-50 text-green-500"}`}>

@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import { ChevronRight, Ban, EyeOff, BellOff, Bell, LogOut, Copy, UserCog, Info } from "lucide-react";
 import { arrayRemove, updateDoc } from "firebase/firestore";
 import { PageHeader, dataDoc } from "./common";
+import { getPrefs, setPrefs, requestPermission, showNotice, enablePeriodicNews, registerSW } from "./notify";
 
 const APP_VERSION = "2.0.0";
 
@@ -11,6 +12,18 @@ const Section = ({ title, children }) => (
     <div className="px-4 pb-2 text-xs font-bold text-gray-400">{title}</div>
     <div className="bg-white border-y divide-y">{children}</div>
   </div>
+);
+
+const Toggle = ({ label, hint, on, onClick, disabled }) => (
+  <button disabled={disabled} onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3 text-left disabled:opacity-40">
+    <span className="flex-1 min-w-0">
+      <span className="block text-sm font-bold">{label}</span>
+      {hint && <span className="block text-[11px] text-gray-400">{hint}</span>}
+    </span>
+    <span className={`w-11 h-6 rounded-full p-0.5 transition-colors ${on ? "bg-green-500" : "bg-gray-300"}`}>
+      <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${on ? "translate-x-5" : ""}`} />
+    </span>
+  </button>
 );
 
 const Row = ({ icon: Icon, label, value, onClick, danger }) => (
@@ -49,8 +62,17 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
 
   const askNotif = async () => {
     if (typeof Notification === "undefined") return showNotification?.("このブラウザは通知に対応していません");
-    const p = await Notification.requestPermission();
+    await registerSW();
+    const p = await requestPermission();
     setNotifPerm(p);
+    if (p === "granted") showNotice("通知をオンにしました", "テスト通知です。起動時に未読とニュースをお知らせします", { tag: "welcome" });
+    else if (p === "denied") showNotification?.("ブラウザの設定から通知を許可してください");
+  };
+  const [prefs, setPrefsState] = useState(getPrefs());
+  const toggle = (key) => {
+    const next = setPrefs({ [key]: !prefs[key] });
+    setPrefsState(next);
+    if (key === "news") enablePeriodicNews(next.news);
   };
 
   const notifLabel = { granted: "許可済み", denied: "ブロック中", default: "未設定", unsupported: "非対応" }[notifPerm] || notifPerm;
@@ -75,6 +97,9 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
 
         <Section title="通知">
           <Row icon={Bell} label="ブラウザ通知" value={notifLabel} onClick={askNotif} />
+          <Toggle label="起動時に通知" hint="アプリを開いたとき、未読メッセージと最新ニュースをお知らせ" on={prefs.launch} disabled={notifPerm !== "granted"} onClick={() => toggle("launch")} />
+          <Toggle label="新着メッセージ" hint="アプリが裏にあるときに通知（ミュート中のトークは除く）" on={prefs.message} disabled={notifPerm !== "granted"} onClick={() => toggle("message")} />
+          <Toggle label="ニュース速報" hint="対応ブラウザではアプリを閉じていても定期的に確認" on={prefs.news} disabled={notifPerm !== "granted"} onClick={() => toggle("news")} />
           {mutedList.length === 0 && <div className="px-4 py-3 text-xs text-gray-400">ミュート中のトークはありません</div>}
           {mutedList.map((c) => (
             <div key={c.id} className="flex items-center gap-3 px-4 py-2.5">
