@@ -58,7 +58,7 @@ export const onRequestPost = async ({ env, request }) => {
         type: "message",
         title: chat.isGroup ? chat.name || "グループ" : myName,
         body: chat.isGroup ? `${myName}: ${text}` : text,
-        tag: `chat-${body.chatId}`, url, vibrate: MSG_VIBRATE,
+        tag: `chat-${body.chatId}`, url, vibrate: MSG_VIBRATE, renotify: true,
       }, { kind: "message", chatId: body.chatId, ttl: 3 * 24 * 3600, urgency: "high" });
       return json({ ok: true, sent });
     }

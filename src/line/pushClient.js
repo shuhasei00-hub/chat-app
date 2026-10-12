@@ -100,3 +100,25 @@ export const ensurePushReady = async (user) => {
   if (Notification.permission !== "granted") return { ok: false, reason: "permission" };
   return syncPush(user);
 };
+
+// 通知が届く状態かどうかの診断（設定画面の「通知の状態」用）
+export const getPushStatus = async () => {
+  const ua = navigator.userAgent;
+  const st = {
+    supported: pushSupported(),
+    permission: typeof Notification !== "undefined" ? Notification.permission : "unsupported",
+    ios: /iPhone|iPad|iPod/.test(ua),
+    standalone: !!(window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true),
+    serverEnabled: null, // true: VAPID設定済み / false: 未設定 / null: サーバーに接続できない
+    subscribed: false,
+  };
+  try {
+    const k = await fetch("/api/push/key").then((r) => (r.ok ? r.json() : null));
+    st.serverEnabled = k ? !!k.enabled : null;
+  } catch { st.serverEnabled = null; }
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    st.subscribed = !!(await reg?.pushManager?.getSubscription());
+  } catch { /* 無視 */ }
+  return st;
+};

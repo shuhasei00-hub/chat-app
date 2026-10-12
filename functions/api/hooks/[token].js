@@ -72,7 +72,7 @@ export const onRequestPost = async ({ env, request, params }) => {
     await fanOut(env, participants, {
       type: "message", title: chat.isGroup ? `${chat.name || "グループ"}` : senderName,
       body: chat.isGroup ? `${senderName}: ${content}` : content,
-      tag: `chat-${hook.chatId}`, url: `/?chat=${encodeURIComponent(hook.chatId)}`, vibrate: [200, 100, 200],
+      tag: `chat-${hook.chatId}`, url: `/?chat=${encodeURIComponent(hook.chatId)}`, vibrate: [200, 100, 200], renotify: true,
     }, { kind: "hook", chatId: hook.chatId, ttl: 3 * 24 * 3600, urgency: "high" }).catch(() => 0);
 
     return json({ ok: true });

@@ -1,3 +1,11 @@
+【v6】決済まわりの安全対策
+  ★ 重要: Firestore のルールを docs/firestore.rules.example の内容に差し替えてください（支払い記録の読み取り許可が入っています）
+  - 支払い記録を server/data/payments（サーバー専用）へ移動。利用者が偽の支払い記録で無料コインを作れる穴を修正
+  - 販売価格: 300円を廃止（手数料が最低150円のため）。500円〜に変更（functions/_lib/packs.js）
+  - 結合テスト追加: tests/pay.test.mjs（二重入金・偽Webhook・他人の確認・期限切れ）
+  - .gitignore を追加（.env / .dev.vars を除外）
+  - 残高(wallet)のブラウザ書き換えは、今回は対応していません（README「既知の制限」参照）
+
 【v5 追加】fincode byGMO のコンビニ決済（決済ページ型 + アプリ内バーコード型）
   新規: functions/_lib/providers/fincode.js / functions/api/pay/return.js / tests/fincode.test.mjs
   変更: providers/index.js, webhook/[provider].js(receive:"0"を返す), worker/index.js(/api/pay/return), diag.js, ChargeView.js(バーコード表示・端末情報), .dev.vars.example, README.md

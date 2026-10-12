@@ -1,10 +1,10 @@
 // 設定: アカウント / 友だち管理（ブロック・非表示）/ 通知 / ログアウト
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Ban, EyeOff, BellOff, Bell, LogOut, Copy, UserCog, Info, Terminal } from "lucide-react";
 import { arrayRemove, updateDoc } from "firebase/firestore";
 import { PageHeader, dataDoc } from "./common";
 import { getPrefs, setPrefs, requestPermission, showNotice, enablePeriodicNews, registerSW } from "./notify";
-import { pushSupported, sendTestPush, syncPush, syncPushPrefs } from "./pushClient";
+import { getPushStatus, pushSupported, sendTestPush, syncPush, syncPushPrefs } from "./pushClient";
 
 const APP_VERSION = "2.0.0";
 
@@ -62,6 +62,9 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
   const unhide = (uid) => updateDoc(dataDoc(db, appId, "users", user.uid), { hiddenFriends: arrayRemove(uid) }).then(() => showNotification?.("非表示を解除しました")).catch(() => showNotification?.("エラーが発生しました"));
 
   const [testing, setTesting] = useState(false);
+  const [status, setStatus] = useState(null);
+  const refreshStatus = () => getPushStatus().then(setStatus).catch(() => {});
+  useEffect(() => { refreshStatus(); }, [notifPerm, testing]); // eslint-disable-line react-hooks/exhaustive-deps
   const askNotif = async () => {
     if (typeof Notification === "undefined") return showNotification?.("このブラウザは通知に対応していません");
     await registerSW();
@@ -115,6 +118,27 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
         </Section>
 
         <Section title="通知">
+          {status && (() => {
+            const needHome = status.ios && !status.standalone;
+            const steps = [
+              [!needHome && status.supported, "この端末で利用できる", needHome ? "iPhoneは Safari の共有ボタン →「ホーム画面に追加」で追加し、そのアイコンから開いてください" : "このブラウザはプッシュ通知に対応していません（Chrome / Edge / Firefox / Safariを使ってください）"],
+              [status.permission === "granted", "通知を許可している", status.permission === "denied" ? "ブラウザ/端末の設定でこのサイトの通知を「許可」に変えてください（下の「ブラウザ通知」から変更はできません）" : "下の「ブラウザ通知」をタップして「許可」を選んでください"],
+              [status.serverEnabled === true, "サーバーの通知設定（VAPID鍵）", status.serverEnabled === null ? "サーバー(/api)に接続できません。Cloudflareにデプロイした環境で確認してください" : "管理者向け: Cloudflareの変数に VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY を登録して再デプロイが必要です"],
+              [status.subscribed, "この端末を通知の宛先に登録済み", "上の3つが✓になった状態で「テスト通知を送る」を押すと登録されます"],
+            ];
+            const next = steps.find((x) => !x[0]);
+            return (
+              <div className="px-4 py-3 text-xs bg-white">
+                <div className="font-bold text-gray-700 mb-1.5">通知の状態</div>
+                {steps.map(([ok, label]) => (
+                  <div key={label} className={`flex items-center gap-2 py-0.5 ${ok ? "text-green-600" : "text-gray-500"}`}><span className="font-bold w-4">{ok ? "✓" : "✕"}</span>{label}</div>
+                ))}
+                <div className={`mt-2 p-2 rounded-lg leading-snug ${next ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"}`}>
+                  {next ? `次にやること: ${next[2]}` : "準備OKです。アプリを閉じても、メッセージ・着信が通知と音でお知らせされます。"}
+                </div>
+              </div>
+            );
+          })()}
           <Row icon={Bell} label="ブラウザ通知" value={notifLabel} onClick={askNotif} />
           <Toggle label="起動時に通知" hint="アプリを開いたとき、未読メッセージと最新ニュースをお知らせ" on={prefs.launch} disabled={notifPerm !== "granted"} onClick={() => toggle("launch")} />
           <Toggle label="新着メッセージ" hint="アプリが裏にあるときに通知（ミュート中のトークは除く）" on={prefs.message} disabled={notifPerm !== "granted"} onClick={() => toggle("message")} />

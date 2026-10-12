@@ -11,7 +11,7 @@ import SettingsView from "./line/SettingsView";
 import ServicesView from "./line/ServicesView";
 import ChargeView, { PaymentWatcher } from "./line/ChargeView";
 import DevToolsView from "./line/DevToolsView";
-import { LaunchNotifier, notifyNewMessage, takePendingView } from "./line/notify";
+import { LaunchNotifier, notifyNewMessage, takePendingView, messageAlertsEnabled, chatUnread, countUnread } from "./line/notify";
 import BottomNav, { NAV_VIEWS } from "./line/BottomNav";
 import { BlockButton } from "./line/common";
 import RemindersView from "./line/RemindersView";
@@ -197,16 +197,23 @@ const playNotificationSound = () => {
   try {
     initAudioContext();
     if (!audioCtx) return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(1e-5, audioCtx.currentTime + 0.5);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.5);
+    if (audioCtx.state !== "running") return;
+    // 「ピコン」: 2つの音を重ねないよう少しずらして鳴らす
+    [[988, 0], [1319, 0.14]].forEach(([freq, delay]) => {
+      const t = audioCtx.currentTime + delay;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(1e-4, t);
+      gain.gain.exponentialRampToValueAtTime(0.28, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(1e-5, t + 0.45);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    });
+    if (navigator.vibrate) { try { navigator.vibrate([120, 60, 120]); } catch { /* 無視 */ } }
   } catch (e) {
     console.error("Audio play failed", e);
   }
@@ -6157,7 +6164,7 @@ const HomeView = ({ user, profile, allUsers, chats, setView, setActiveChatId, se
                   icon = partnerData.avatar;
                 }
               }
-              const unreadCount = chat.unreadCounts?.[user.uid] || 0;
+              const unreadCount = chatUnread(user, chat);
               return /* @__PURE__ */ jsxs(
                 "div",
                 {
@@ -7951,8 +7958,8 @@ const loadMorePosts = async () => {
               msgTime = now;
             }
             const msgUniqueKey = `${change.doc.id}_${msgTime}`;
-            if (now - msgTime < 1e4 && !processedMsgIds.current.has(msgUniqueKey)) {
-              playNotificationSound();
+            if (now - msgTime < 3e4 && !processedMsgIds.current.has(msgUniqueKey)) {
+              if (messageAlertsEnabled(change.doc.id)) playNotificationSound();
               notifyNewMessage(change.doc.id, data, lastMsg);
               processedMsgIds.current.add(msgUniqueKey);
             }
@@ -8470,12 +8477,12 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
           /* @__PURE__ */ jsx("button", { className: "flex-1 py-4 bg-green-500 text-white rounded-2xl font-bold", onClick: () => addFriendById(searchQuery), children: "\u8FFD\u52A0" })
         ] })
       ] }) }),
-      user && /* @__PURE__ */ jsx(LaunchNotifier, { user, chats, mutedChats, setView, setActiveChatId, allUsers, db, appId, showNotification }),
+      user && /* @__PURE__ */ jsx(LaunchNotifier, { user, chats, mutedChats, hiddenChats: profile?.hiddenChats, setView, setActiveChatId, allUsers, db, appId, showNotification }),
       user && /* @__PURE__ */ jsx(PaymentWatcher, { user, db, appId, setView, showNotification }),
       user && !activeCall && NAV_VIEWS.includes(view) && /* @__PURE__ */ jsx(BottomNav, {
         view,
         setView,
-        unreadTotal: (chats || []).reduce((n, c) => n + (c?.participants?.includes(user.uid) && !mutedChats.includes(c.id) ? c.unreadCounts?.[user.uid] || 0 : 0), 0)
+        unreadTotal: countUnread(user, chats, mutedChats, profile?.hiddenChats || [])
       })
     ] }),
     /* @__PURE__ */ jsx("style", { children: `.scrollbar-hide::-webkit-scrollbar { display: none; } .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }` })

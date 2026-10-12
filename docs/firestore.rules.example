@@ -1,29 +1,31 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 決済の記録(payments)は本人だけが読め、書き込みはサーバー(Cloudflare Functions)だけ。
-    // ※ この match は下のワイルドカードより「具体的」ですが、Firestoreルールは OR 評価なので、
-    //   ワイルドカードの write を許可したままだと payments にも書けてしまいます。
-    //   本番では下のワイルドカードを外し、コレクションごとに定義してください。
-    match /artifacts/{appId}/public/data/payments/{id} {
+
+    // ── ① 決済の記録: artifacts/{appId}/server/data/payments/{ref} ──────────────
+    // 書き込みはサーバー(Cloudflare Workers)だけ（サービスアカウントはルールを無視できる）。ブラウザからは書けません。
+    // 読み取りは本人の分だけ（アプリの「チャージ履歴」「支払い票」表示用）。
+    // ★ 以前は public/data/payments に置いていたため、利用者が「偽の支払い記録」を作って無料でコインを得られる穴がありました。
+    match /artifacts/{appId}/server/data/payments/{id} {
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
       allow write: if false;
     }
 
-    // サーバー専用領域（プッシュ購読・Webhookトークン・リマインダー）: artifacts/{appId}/server/data/...
-    // 上のルールに一致しないため、ブラウザからは読み書きできません（サーバーはサービスアカウントで管理者権限）。
+    // ── ② サーバー専用領域: artifacts/{appId}/server/data/ の上記以外（プッシュ購読・Webhookトークン・リマインダー）──
+    // どのルールにも一致しない = ブラウザからは読み書きできません。
     // ★ ここを許可するルール（例: match /{document=**} で全許可）を足さないでください。購読情報やWebhookのURLが漏れます。
 
-    // 既存アプリと追加機能（keep / events / todos / wallet_tx / オープンチャット）は
-    // すべて artifacts/{appId}/public/data/ 配下に保存されます。
-    // 最低限、サインイン済みユーザーに読み書きを許可すれば動作します。
+    // ── ③ 既存アプリの公開データ: artifacts/{appId}/public/data/ ──────────────────
+    // 既存アプリは users / chats / posts などをここに保存します。サインイン済みなら読み書き可（従来どおり）。
     match /artifacts/{appId}/public/data/{document=**} {
       allow read, write: if request.auth != null;
     }
   }
 }
-// 注意: ルールは複数の match が一致すると OR で評価されます。
-// コレクションごとに厳しくする場合は、上のワイルドカードを外して
-// すべてのコレクション（users, chats, posts, ...）を個別に定義してください。
-// 特に users/{uid}.wallet をクライアントから自由に書き換えられる状態は、
-// 実際のお金と連動させるなら必ず塞ぐ必要があります（README「注意点」参照）。
+
+// ── 既知の制限（コイン残高） ─────────────────────────────────────────────────────
+// users/{uid}.wallet は、ゲーム・送金・スタンプ購入などがブラウザから直接書き換える作りのままです。
+// そのため、ブラウザの開発者ツールから自分の残高を増やすことができます。
+//   ・チャージ（実際のお金）の入金処理自体は、サーバーだけが実行し、改ざんできません。
+//   ・ただし「購入したコイン」と「無料で増やせるコイン」は区別されません。
+// 完全に防ぐには、wallet の増減をすべてサーバー処理に移す必要があります（README「既知の制限」参照）。

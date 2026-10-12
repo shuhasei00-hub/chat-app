@@ -1,6 +1,6 @@
 // POST /api/pay/checkout  { provider, packId }  (Authorization: Bearer <Firebase ID token>)
 import { requireUser } from "../../_lib/auth.js";
-import { createDoc } from "../../_lib/firestore.js";
+import { createPayment } from "../../_lib/firestore.js";
 import { findPack } from "../../_lib/packs.js";
 import { PROVIDERS } from "../../_lib/providers/index.js";
 import { HttpError, appOrigin, json } from "../../_lib/util.js";
@@ -16,7 +16,7 @@ export const onRequestPost = async ({ env, request }) => {
 
     const ref = crypto.randomUUID().replace(/-/g, "");
     const { url, providerId, extra } = await provider.create(env, { ref, pack, origin: appOrigin(env, request), customer: body.customer });
-    await createDoc(env, ["payments", ref], {
+    await createPayment(env, ref, {
       uid, provider: provider.id, providerId, packId: pack.id, yen: pack.yen, coins: pack.coins,
       status: "pending", url, ...(extra || {}), createdAt: new Date(),
     });

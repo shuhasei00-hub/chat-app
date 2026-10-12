@@ -1,8 +1,8 @@
 // コインチャージ（外部決済サービス連携）+ 決済からの戻り処理 + 入金通知
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CreditCard, Store, Loader2, RefreshCw, ExternalLink, CheckCircle2, Clock, XCircle, Ticket, X, Copy } from "lucide-react";
-import { onSnapshot, query, where } from "firebase/firestore";
-import { PageHeader, EmptyState, Spinner, dataCol, toMillis, formatDateTime } from "./common";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { PageHeader, EmptyState, Spinner, toMillis, formatDateTime } from "./common";
 import { showNotice, goTo } from "./notify";
 
 // バーコード表示用の端末情報（fincode仕様: iPhoneはCSSピクセル、それ以外は物理ピクセル）
@@ -15,6 +15,9 @@ const deviceInfo = () => {
     ? { device_name: "iPhone", win_width: String(Math.round(w)), win_height: String(Math.round(h)), pixel_ratio: ratio.toFixed(2), win_size_type: "2" }
     : { device_name: "Android", win_width: String(Math.round(w * ratio)), win_height: String(Math.round(h * ratio)), pixel_ratio: ratio.toFixed(2), win_size_type: "1" };
 };
+
+// 支払い記録はサーバー専用の場所（server/data/payments）。ブラウザは自分の分だけ読める
+const paymentsCol = (db, appId) => collection(db, "artifacts", appId, "server", "data", "payments");
 
 const apiHeaders = async (user) => ({ "content-type": "application/json", authorization: `Bearer ${await user.getIdToken()}` });
 
@@ -57,7 +60,7 @@ export const PaymentWatcher = ({ user, db, appId, setView, showNotification }) =
 
   useEffect(() => {
     if (!user) return undefined;
-    return onSnapshot(query(dataCol(db, appId, "payments"), where("uid", "==", user.uid)), (snap) => {
+    return onSnapshot(query(paymentsCol(db, appId), where("uid", "==", user.uid)), (snap) => {
       const next = {};
       snap.docs.forEach((d) => { next[d.id] = d.data().status; });
       if (prev.current) {
@@ -99,7 +102,7 @@ const ChargeView = ({ user, db, appId, setView, showNotification }) => {
 
   useEffect(() => { loadConf(); }, [loadConf]);
 
-  useEffect(() => onSnapshot(query(dataCol(db, appId, "payments"), where("uid", "==", user.uid)),
+  useEffect(() => onSnapshot(query(paymentsCol(db, appId), where("uid", "==", user.uid)),
     (s) => setPayments(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt)).slice(0, 30)),
     console.error), [db, appId, user.uid]);
 

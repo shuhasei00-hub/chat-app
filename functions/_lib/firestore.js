@@ -103,7 +103,7 @@ export const settlePayment = async (env, payment, ref) => {
   const now = new Date();
   return commit(env, [
     {
-      update: { name: docName(env, "payments", ref), fields: toFields({ status: "paid", paidAt: now }) },
+      update: { name: serverDocName(env, "payments", ref), fields: toFields({ status: "paid", paidAt: now }) },
       updateMask: { fieldPaths: ["status", "paidAt"] },
       currentDocument: { updateTime: payment.__updateTime },
     },
@@ -127,6 +127,18 @@ export const settlePayment = async (env, payment, ref) => {
   ]);
 };
 
+// 支払い記録は server/data/payments に置く（ブラウザから書き込めない場所。読み取りは本人のみ許可するルールを docs/firestore.rules.example に記載）。
+// public/data 配下に置くと、利用者が偽の支払い記録を作って無料でコインを得られてしまうため。
+export const createPayment = (env, ref, data) =>
+  commit(env, [{ update: { name: serverDocName(env, "payments", ref), fields: toFields(data) }, currentDocument: { exists: false } }]);
+export const getPayment = (env, ref) => getServerDoc(env, "payments", ref);
+export const patchPayment = (env, ref, data, updateTime) =>
+  commit(env, [{
+    update: { name: serverDocName(env, "payments", ref), fields: toFields(data) },
+    updateMask: { fieldPaths: Object.keys(data) },
+    ...(updateTime ? { currentDocument: { updateTime } } : { currentDocument: { exists: true } }),
+  }]);
+
 export const patchDoc = (env, segs, data, updateTime) =>
   commit(env, [{
     update: { name: docName(env, ...segs), fields: toFields(data) },
@@ -139,7 +151,7 @@ export const patchDoc = (env, segs, data, updateTime) =>
 //   Firestoreルールにこのパスを許可する記述が無いため、ブラウザからは読み書きできません
 //   （プッシュ購読・Webhookのトークン・リマインダーなど、他人に見せたくない情報用）。
 // ---------------------------------------------------------------------------
-export const serverDocName = (env, ...segs) => `${root(env)}/artifacts/${appId(env)}/server/data/${segs.join("/")}`;
+export function serverDocName(env, ...segs) { return `${root(env)}/artifacts/${appId(env)}/server/data/${segs.join("/")}`; }
 
 // Firestore のフィールドパス用に、識別子でないセグメントをバッククォートで囲む
 export const fieldPath = (...segs) => segs.map((s) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s) ? s : "`" + String(s).replace(/[`\\]/g, "\\$&") + "`")).join(".");

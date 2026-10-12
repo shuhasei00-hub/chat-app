@@ -143,6 +143,7 @@ test("メッセージ通知: 相手の全端末に届き、本文は暗号化さ
   assert.equal(p.payload.title, "アリス");
   assert.equal(p.payload.body, "こんばんは！");
   assert.equal(p.payload.tag, "chat-c1");
+  assert.equal(p.payload.renotify, true); // 同じトークの2通目以降も音・振動が鳴る
   assert.equal(p.payload.url, "/?chat=c1");
   assert.equal(p.headers.urgency, "high");
   assert.equal(p.headers["content-encoding"], "aes128gcm");

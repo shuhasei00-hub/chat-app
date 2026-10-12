@@ -43,9 +43,9 @@ export const requestPermission = async () => {
 };
 
 // 通知を1件表示（Service Worker 経由 → だめなら通常の Notification）
-export const showNotice = async (title, body, { tag, url = "/" } = {}) => {
+export const showNotice = async (title, body, { tag, url = "/", renotify = false } = {}) => {
   if (notifyPermission() !== "granted") return false;
-  const opts = { body, tag, icon: `${process.env.PUBLIC_URL || ""}/icon-192.png`, badge: `${process.env.PUBLIC_URL || ""}/icon-192.png`, data: { url } };
+  const opts = { body, tag, renotify: !!(renotify && tag), vibrate: getPrefs().vibrate ? [200, 100, 200] : undefined, icon: `${process.env.PUBLIC_URL || ""}/icon-192.png`, badge: `${process.env.PUBLIC_URL || ""}/icon-192.png`, data: { url } };
   try {
     const reg = await navigator.serviceWorker?.getRegistration?.();
     if (reg) { await reg.showNotification(title, opts); return true; }
@@ -56,12 +56,27 @@ export const showNotice = async (title, body, { tag, url = "/" } = {}) => {
 
 const mutedIds = getMutedChats;
 
+// 新着メッセージの音・通知を出してよいか（通知設定でオフ / ミュート中のトークは出さない）
+export const messageAlertsEnabled = (chatId) => getPrefs().message !== false && !mutedIds().includes(chatId);
+
+// そのトークの未読数。「最新のメッセージを自分が送った / すでに既読にした」場合は 0。
+// 保存されているカウンタ(unreadCounts)だけを信用すると、古い値が残って実際より多く表示されるため。
+export const chatUnread = (user, chat) => {
+  if (!user || !chat?.participants?.includes(user.uid)) return 0;
+  const lm = chat.lastMessage;
+  if (lm && (lm.senderId === user.uid || (lm.readBy || []).includes(user.uid))) return 0;
+  return Math.min(Math.max(Number(chat.unreadCounts?.[user.uid]) || 0, 0), 99);
+};
+// 未読の合計（ミュート中・非表示にしたトークは含めない）
+export const countUnread = (user, chats, muted = [], hidden = []) =>
+  (chats || []).reduce((n, c) => (muted.includes(c?.id) || hidden.includes(c?.id) ? n : n + chatUnread(user, c)), 0);
+
 // 新着メッセージ通知（アプリが裏にあるときだけ。ミュート中のトークは除外）
 export const notifyNewMessage = (chatId, chat, lastMsg) => {
   if (!getPrefs().message || !document.hidden || mutedIds().includes(chatId)) return;
   const title = chat?.isGroup ? chat.name || "グループ" : "新着メッセージ";
   const text = typeof lastMsg?.content === "string" && lastMsg.content ? lastMsg.content : "メッセージが届きました";
-  showNotice(title, text.slice(0, 120), { tag: `chat-${chatId}`, url: `/?chat=${encodeURIComponent(chatId)}` });
+  showNotice(title, text.slice(0, 120), { tag: `chat-${chatId}`, url: `/?chat=${encodeURIComponent(chatId)}`, renotify: true });
 };
 
 // 通知タップ / 共有ターゲットで渡された URL（?chat=ID / ?open=画面 / ?share_*=...）を解釈
@@ -75,18 +90,16 @@ const parseLaunch = (search) => {
   };
 };
 
-const unreadOf = (user, chats, muted) =>
-  (chats || []).reduce((n, c) => n + (c?.participants?.includes(user.uid) && !(muted || []).includes(c.id) ? c.unreadCounts?.[user.uid] || 0 : 0), 0);
 
 // アプリ起動時: 未読 / 最新ニュースを通知。通知の許可を促すバナーも出します。
 // あわせて、プッシュ購読の同期・通知タップでの画面遷移・共有の受け取り・アプリアイコンのバッジ表示も行います。
-export const LaunchNotifier = ({ user, chats, mutedChats, setView, setActiveChatId, allUsers, db, appId, showNotification }) => {
+export const LaunchNotifier = ({ user, chats, mutedChats, hiddenChats, setView, setActiveChatId, allUsers, db, appId, showNotification }) => {
   const [perm, setPerm] = useState(notifyPermission());
   const [dismissed, setDismissed] = useState(() => { try { return localStorage.getItem(DISMISS_KEY) === "1"; } catch { return false; } });
   const [pendingChat, setPendingChat] = useState(null);
   const [share, setShare] = useState(null);
-  const latest = useRef({ chats, mutedChats });
-  latest.current = { chats, mutedChats };
+  const latest = useRef({ chats, mutedChats, hiddenChats });
+  latest.current = { chats, mutedChats, hiddenChats };
 
   const route = (search) => {
     const { chat, open, share: sh } = parseLaunch(search);
@@ -133,14 +146,15 @@ export const LaunchNotifier = ({ user, chats, mutedChats, setView, setActiveChat
   useEffect(() => { if (user && perm === "granted") syncPush(user); }, [user?.uid, perm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // アプリアイコンの未読バッジ（対応ブラウザのみ）
-  const unread = user ? unreadOf(user, chats, mutedChats) : 0;
+  // 通知が許可されていない端末では出さない（通知が来ないのに数字だけ出る、を防ぐ）
+  const unread = user ? countUnread(user, chats, mutedChats, hiddenChats) : 0;
   useEffect(() => {
     try {
       if (!("setAppBadge" in navigator)) return;
-      if (unread > 0) navigator.setAppBadge(unread).catch(() => {});
+      if (unread > 0 && perm === "granted") navigator.setAppBadge(unread).catch(() => {});
       else navigator.clearAppBadge().catch(() => {});
     } catch { /* 無視 */ }
-  }, [unread]);
+  }, [unread, perm]);
 
   // 起動時通知（1セッション1回）
   useEffect(() => {
@@ -153,8 +167,8 @@ export const LaunchNotifier = ({ user, chats, mutedChats, setView, setActiveChat
     if (!prefs.launch) return undefined;
     const t = setTimeout(async () => {
       try { sessionStorage.setItem("launchNotified", "1"); } catch { /* 無視 */ }
-      const { chats: cs, mutedChats: muted } = latest.current;
-      const n = unreadOf(user, cs, muted);
+      const { chats: cs, mutedChats: muted, hiddenChats: hidden } = latest.current;
+      const n = countUnread(user, cs, muted || [], hidden || []);
       if (n > 0) await showNotice("未読メッセージ", `未読が ${n} 件あります`, { tag: "launch-unread", url: "/" });
       if (prefs.news) {
         try {
