@@ -1,3 +1,8 @@
+【v6.2】ニュースが取得できない問題の修正
+  原因: Yahoo!ニュースが Cloudflare からのアクセスを 403 で断っていた（接続診断「ニュースAPI」が HTTP 403）
+  対応: functions/api/news.js … Yahooが失敗したら Google ニュースRSS / NHK のRSSに自動で切り替え（tests/news.test.mjs 追加）
+  ※ 切り替え後は見出しの出どころが Google ニュース等になります（応答ヘッダ x-news-source で確認可）。各配信元の利用規約をご確認ください。
+
 【v6】決済まわりの安全対策
   ★ 重要: Firestore のルールを docs/firestore.rules.example の内容に差し替えてください（支払い記録の読み取り許可が入っています）
   - 支払い記録を server/data/payments（サーバー専用）へ移動。利用者が偽の支払い記録で無料コインを作れる穴を修正
