@@ -1,12 +1,12 @@
 // 設定: アカウント / 友だち管理（ブロック・非表示）/ 通知 / ログアウト
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Ban, EyeOff, BellOff, Bell, LogOut, Copy, UserCog, Info, Terminal } from "lucide-react";
+import { ChevronRight, Ban, EyeOff, BellOff, Bell, LogOut, Copy, UserCog, Info, Terminal, Music } from "lucide-react";
 import { arrayRemove, updateDoc } from "firebase/firestore";
 import { PageHeader, dataDoc } from "./common";
 import { getPrefs, setPrefs, requestPermission, showNotice, enablePeriodicNews, registerSW } from "./notify";
 import { getPushStatus, pushSupported, sendTestPush, syncPush, syncPushPrefs } from "./pushClient";
 
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.2.0";
 
 const Section = ({ title, children }) => (
   <div className="mt-4">
@@ -140,6 +140,7 @@ const SettingsView = ({ user, profile, allUsers, chats, setView, mutedChats, tog
             );
           })()}
           <Row icon={Bell} label="ブラウザ通知" value={notifLabel} onClick={askNotif} />
+          <Row icon={Music} label="着信音・振動" value="好きな音に変更" onClick={() => setView("ringtone")} />
           <Toggle label="起動時に通知" hint="アプリを開いたとき、未読メッセージと最新ニュースをお知らせ" on={prefs.launch} disabled={notifPerm !== "granted"} onClick={() => toggle("launch")} />
           <Toggle label="新着メッセージ" hint="アプリが裏にあるときに通知（ミュート中のトークは除く）" on={prefs.message} disabled={notifPerm !== "granted"} onClick={() => toggle("message")} />
           <Toggle label="着信（通話）" hint="アプリを閉じていても、着信を通知し端末を振動させます" on={prefs.call} disabled={notifPerm !== "granted"} onClick={() => toggle("call")} />

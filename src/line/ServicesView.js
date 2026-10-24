@@ -1,6 +1,6 @@
 // サービス一覧（LINEの「サービス」タブ相当）
 import React from "react";
-import { Hash, Bookmark, CalendarDays, CloudSun, Sparkles, Store, Coins, Gamepad2, Cake, QrCode, Settings, Users, Newspaper, CreditCard, BellRing, Languages, Banknote, BookOpen, Plug } from "lucide-react";
+import { Hash, Bookmark, CalendarDays, CloudSun, Sparkles, Store, Coins, Gamepad2, Cake, QrCode, Settings, Users, Newspaper, CreditCard, BellRing, Languages, Banknote, BookOpen, Plug, Wrench, Music } from "lucide-react";
 import { PageHeader } from "./common";
 
 const SECTIONS = [
@@ -22,6 +22,8 @@ const SECTIONS = [
       { id: "news", label: "ニュース", icon: Newspaper, color: "bg-indigo-50 text-indigo-500" },
       { id: "charge", label: "コインチャージ", icon: CreditCard, color: "bg-green-50 text-green-600" },
       { id: "reminders", label: "リマインダー", icon: BellRing, color: "bg-amber-50 text-amber-600" },
+      { id: "toolbox", label: "便利ボックス", icon: Wrench, color: "bg-cyan-50 text-cyan-600" },
+      { id: "ringtone", label: "着信音", icon: Music, color: "bg-fuchsia-50 text-fuchsia-600" },
     ],
   },
   {

@@ -1,0 +1,37 @@
+【v6.2】ニュースが取得できない問題の修正
+  原因: Yahoo!ニュースが Cloudflare からのアクセスを 403 で断っていた（接続診断「ニュースAPI」が HTTP 403）
+  対応: functions/api/news.js … Yahooが失敗したら Google ニュースRSS / NHK のRSSに自動で切り替え（tests/news.test.mjs 追加）
+  ※ 切り替え後は見出しの出どころが Google ニュース等になります（応答ヘッダ x-news-source で確認可）。各配信元の利用規約をご確認ください。
+
+【v6】決済まわりの安全対策
+  ★ 重要: Firestore のルールを docs/firestore.rules.example の内容に差し替えてください（支払い記録の読み取り許可が入っています）
+  - 支払い記録を server/data/payments（サーバー専用）へ移動。利用者が偽の支払い記録で無料コインを作れる穴を修正
+  - 販売価格: 300円を廃止（手数料が最低150円のため）。500円〜に変更（functions/_lib/packs.js）
+  - 結合テスト追加: tests/pay.test.mjs（二重入金・偽Webhook・他人の確認・期限切れ）
+  - .gitignore を追加（.env / .dev.vars を除外）
+  - 残高(wallet)のブラウザ書き換えは、今回は対応していません（README「既知の制限」参照）
+
+【v5 追加】fincode byGMO のコンビニ決済（決済ページ型 + アプリ内バーコード型）
+  新規: functions/_lib/providers/fincode.js / functions/api/pay/return.js / tests/fincode.test.mjs
+  変更: providers/index.js, webhook/[provider].js(receive:"0"を返す), worker/index.js(/api/pay/return), diag.js, ChargeView.js(バーコード表示・端末情報), .dev.vars.example, README.md
+  Cloudflareに FINCODE_SECRET_KEY（と FINCODE_ENV=test）を登録 → 再デプロイ → 設定>開発者ツール>接続診断で確認
+  テスト: npm run test:server
+
+【今回の変更】フルセットのzipです（そのまま上書き or 新規デプロイできます）
+
+1) アプリを閉じていてもメッセージ通知 / 着信通知（振動つき）/ 不在着信
+2) LINE風の追加: リンクプレビュー、翻訳、為替、Wikipedia、外部連携(Webhook)、リマインダー、共有ターゲット、カレンダー連携、未読バッジ
+3) 既存の不具合修正: lastMessage に createdAt が無く、アプリ内通知が発火していなかった
+
+★ 必ずやること（これをしないと「アプリを閉じている間の通知」は動きません）
+  npm run vapid で鍵を作り、Cloudflareの「変数とシークレット」に
+  VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT を登録 → 再デプロイ
+  （Cronでリマインダーを動かすため wrangler.jsonc に triggers を追加済み）
+  詳しくは README の「通知」を読んでください。
+
+★ 新規ファイル
+  functions/_lib/{webpush,push,cron,ogp}.js
+  functions/api/push/{key,subscribe,prefs,notify}.js, functions/api/hooks/{manage,[token]}.js
+  functions/api/{reminders,ogp}.js, functions/api/tools/[name].js
+  public/sw.js（作り直し）  src/line/{pushClient,ring,prefs,toolsApi,MessageExtras,ShareSheet,RemindersView,IntegrationsView,ToolsView}.js
+  tests/  scripts/generate-vapid.mjs

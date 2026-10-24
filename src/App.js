@@ -17,6 +17,9 @@ import { BlockButton } from "./line/common";
 import RemindersView from "./line/RemindersView";
 import IntegrationsView from "./line/IntegrationsView";
 import ToolsView from "./line/ToolsView";
+import RingtoneView from "./line/RingtoneView";
+import AlarmWatcher from "./line/AlarmWatcher";
+import ToolboxView from "./line/ToolboxView";
 import { LinkPreview, TranslateBox } from "./line/MessageExtras";
 import { pushNotify, syncPushPrefs, unsubscribePush, closeCallNotification, closeChatNotifications } from "./line/pushClient";
 import { useRing, stopRing } from "./line/ring";
@@ -1973,7 +1976,7 @@ const LeaveGroupConfirmModal = ({ onClose, onLeave }) => /* @__PURE__ */ jsx("di
   ] })
 ] }) });
 const IncomingCallOverlay = ({ callData, onAccept, onDecline, allUsers }) => {
-  useRing("incoming");
+  useRing("incoming", callData?.callerId);
   const caller = allUsers.find((u) => u.uid === callData.callerId);
   const isVideo = callData?.callType !== "audio";
   return /* @__PURE__ */ jsxs("div", { className: "fixed inset-0 z-[500] bg-gray-900 flex flex-col items-center justify-between py-16 px-6 animate-in fade-in duration-300", children: [
@@ -8438,6 +8441,8 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
         view === "fortune" && /* @__PURE__ */ jsx(FortuneView, { user, setView }),
         view === "settings" && /* @__PURE__ */ jsx(SettingsView, { user, profile, allUsers, chats, setView, mutedChats, toggleMuteChat, onLogout: async () => { await unsubscribePush(user); signOut(auth); }, db, appId, showNotification }),
         view === "reminders" && /* @__PURE__ */ jsx(RemindersView, { user, setView, showNotification }),
+        view === "ringtone" && /* @__PURE__ */ jsx(RingtoneView, { profile, allUsers, setView, showNotification }),
+        view === "toolbox" && /* @__PURE__ */ jsx(ToolboxView, { setView, showNotification }),
         view === "integrations" && /* @__PURE__ */ jsx(IntegrationsView, { user, chats, allUsers, setView, showNotification }),
         (view === "tools-translate" || view === "tools-fx" || view === "tools-wiki") && /* @__PURE__ */ jsx(ToolsView, { tab: view.slice(6), setView, showNotification }),
         view === "pachinko" && /* @__PURE__ */ jsx(PachinkoView, { user, profile, onBack: () => setView("home"), showNotification }),
@@ -8477,6 +8482,7 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
           /* @__PURE__ */ jsx("button", { className: "flex-1 py-4 bg-green-500 text-white rounded-2xl font-bold", onClick: () => addFriendById(searchQuery), children: "\u8FFD\u52A0" })
         ] })
       ] }) }),
+      /* @__PURE__ */ jsx(AlarmWatcher, {}),
       user && /* @__PURE__ */ jsx(LaunchNotifier, { user, chats, mutedChats, hiddenChats: profile?.hiddenChats, setView, setActiveChatId, allUsers, db, appId, showNotification }),
       user && /* @__PURE__ */ jsx(PaymentWatcher, { user, db, appId, setView, showNotification }),
       user && !activeCall && NAV_VIEWS.includes(view) && /* @__PURE__ */ jsx(BottomNav, {
