@@ -2,8 +2,9 @@
 // （すべて端末内で完結。データは localStorage に保存します）
 import React, { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Check, Copy, RefreshCw, Play, Pause, RotateCcw, BellOff } from "lucide-react";
-import { CheckSquare, Timer as TimerIcon, Receipt, KeyRound, Target, Calculator, Ruler, CalendarDays, Hourglass, Globe, Flame, Wallet, Users, Dices, AlarmClock, MessageSquare, Type } from "lucide-react";
+import { CheckSquare, Timer as TimerIcon, Receipt, KeyRound, Target, Calculator, Ruler, CalendarDays, Hourglass, Globe, Flame, Wallet, Users, Dices, AlarmClock, MessageSquare, Type, Percent, Cake, Languages, Palette, Image as ImageIcon, Droplets, Scale, Waves, Music, Mic, Pencil, Brain, ListChecks, Shuffle } from "lucide-react";
 import { PageHeader } from "./common";
+import { Tax, Wareki, TextConv, ColorTool, Water, Weight, Metronome, Ambient, ImageResize, Recorder, Draw, Amida, Flash, Checklist } from "./ToolboxMore2";
 import { Calc, Units, DateCalc, Countdown, WorldClock, Habits, Ledger, Teams, Dice, Alarms, Pomodoro, Snippets, Counter } from "./ToolboxMore";
 import { playPreview, stopPreview } from "./ring";
 import { getRingSettings } from "./ringtones";
@@ -275,9 +276,27 @@ const GROUPS = [
     ["units", "単位変換", Ruler, "bg-lime-50 text-lime-600", Units],
     ["split", "割り勘", Receipt, "bg-green-50 text-green-600", Split],
     ["count", "文字数", Type, "bg-slate-100 text-slate-600", Counter],
+    ["tax", "税・割引", Percent, "bg-red-50 text-red-500", Tax],
+    ["wareki", "和暦・年齢", Cake, "bg-pink-50 text-pink-500", Wareki],
+    ["textconv", "文字変換", Languages, "bg-blue-50 text-blue-600", TextConv],
+    ["color", "色", Palette, "bg-purple-50 text-purple-500", ColorTool],
+    ["imgresize", "画像リサイズ", ImageIcon, "bg-teal-50 text-teal-600", ImageResize],
     ["pass", "パスワード", KeyRound, "bg-violet-50 text-violet-500", Pass],
   ]],
+  ["健康・リラックス", [
+    ["water", "水分記録", Droplets, "bg-sky-50 text-sky-500", Water],
+    ["weight", "体重記録", Scale, "bg-emerald-50 text-emerald-600", Weight],
+    ["ambient", "環境音", Waves, "bg-indigo-50 text-indigo-500", Ambient],
+    ["metro", "メトロノーム", Music, "bg-amber-50 text-amber-600", Metronome],
+  ]],
+  ["作る・覚える", [
+    ["checklist", "チェックリスト", ListChecks, "bg-green-50 text-green-600", Checklist],
+    ["flash", "暗記カード", Brain, "bg-violet-50 text-violet-500", Flash],
+    ["recorder", "音声メモ", Mic, "bg-rose-50 text-rose-500", Recorder],
+    ["draw", "お絵描き", Pencil, "bg-orange-50 text-orange-500", Draw],
+  ]],
   ["みんなで遊ぶ・決める", [
+    ["amida", "あみだくじ", Shuffle, "bg-lime-50 text-lime-600", Amida],
     ["roulette", "ルーレット", Target, "bg-fuchsia-50 text-fuchsia-500", Roulette],
     ["teams", "チーム分け", Users, "bg-cyan-50 text-cyan-600", Teams],
     ["dice", "サイコロ・コイン", Dices, "bg-teal-50 text-teal-600", Dice],

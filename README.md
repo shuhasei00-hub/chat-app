@@ -254,6 +254,24 @@ UnivaPay の Webhook: ダッシュボードで `https://<ドメイン>/api/pay/w
 
 ※ 目覚まし・タイマーはアプリを開いている間だけ鳴ります（`AlarmWatcher` を App.js に常駐）。
 
+### v2.3 の追加
+
+**着信音がアカウントに保存されます（ログアウトしても消えません）**
+- 着信音（切り出した音声）と設定は、端末内に加えて **アカウントにも自動バックアップ**されます（`src/line/ringSync.js`）。ログアウト→ログイン、別の端末、ブラウザのデータ消去のあとでも、同じアカウントで入れば自動で戻ります。
+- 保存先: `artifacts/{appId}/public/data/users/{uid}/ringtones/*`（音声は約450KBごとに `chunks` へ分割）と `.../prefs/ring`。**既存の Firestore ルール（`public/data/**` はログイン済みなら読み書き可）のままで動きます**。
+- 削除した着信音は他の端末にも反映されます。クラウドに置くのは 6MB 以下の音（30秒の着信音で約2MB）。
+- 着信音・振動の画面の上部に保存状態が出ます（「今すぐ同期」ボタンつき）。
+- ブラウザに勝手に消されにくくする `navigator.storage.persist()` も要求します。
+
+**画面共有で、再生中の動画の音も相手に届きます**（1:1通話・グループ通話・ライブ配信の3か所）
+- 共有の選択画面で「音声も共有」（Chromeは「タブ」を選ぶと出ます）にチェックを入れると、動画の音と自分のマイクをまぜて送ります（`src/line/screenAudio.js`）。
+- マイクをミュートしても動画の音は流れ続けます。共有を止めるとマイクだけに戻ります。
+- 音声のチェックを入れ忘れた場合は、画面上部にお知らせが出ます。
+- 注意: スマホのブラウザは画面共有そのものに未対応のことがあります。ChromeOS・Windows・Macの Chrome / Edge が確実です。
+
+**便利ボックスにさらに13個**（`src/line/ToolboxMore2.js`）
+税・割引計算 / 和暦・年齢・干支・星座 / 文字変換（ひらがな⇄カタカナ・全角半角・重複行削除ほか）/ 色（HEX・RGB・HSL・読みやすさ判定）/ 画像リサイズ・圧縮 / 水分記録 / 体重記録（グラフ）/ 環境音（ノイズ・波・スリープタイマー）/ メトロノーム（タップテンポ）/ チェックリスト（旅行・買い物・引っ越しのひな形つき）/ 暗記カード / 音声メモ（録音）/ お絵描き / あみだくじ
+
 ### 追加・変更したファイル
-- 追加: `src/line/ringtones.js`, `src/line/RingtoneView.js`, `src/line/ToolboxView.js`, `src/line/ToolboxMore.js`, `src/line/AlarmWatcher.js`
+- 追加: `src/line/ringSync.js`, `src/line/RingSync.js`, `src/line/screenAudio.js`, `src/line/ToolboxMore2.js`, `src/line/ringtones.js`, `src/line/RingtoneView.js`, `src/line/ToolboxView.js`, `src/line/ToolboxMore.js`, `src/line/AlarmWatcher.js`
 - 変更: `src/line/ring.js`（全面書き換え）, `src/line/SettingsView.js`, `src/line/ServicesView.js`, `src/App.js`（import 3行・ルート2行・`<AlarmWatcher />` 1行・`useRing("incoming", callData?.callerId)`）

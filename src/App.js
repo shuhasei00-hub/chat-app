@@ -18,7 +18,9 @@ import RemindersView from "./line/RemindersView";
 import IntegrationsView from "./line/IntegrationsView";
 import ToolsView from "./line/ToolsView";
 import RingtoneView from "./line/RingtoneView";
+import { requestScreen, startScreenAudio, stopScreenAudio } from "./line/screenAudio";
 import AlarmWatcher from "./line/AlarmWatcher";
+import RingSync from "./line/RingSync";
 import ToolboxView from "./line/ToolboxView";
 import { LinkPreview, TranslateBox } from "./line/MessageExtras";
 import { pushNotify, syncPushPrefs, unsubscribePush, closeCallNotification, closeChatNotifications } from "./line/pushClient";
@@ -705,6 +707,7 @@ const VideoCallView = ({ user, chatId, callData, onEndCall, isCaller: isCallerPr
     }
     try {
       if (screenStreamRef.current) {
+        stopScreenAudio(screenStreamRef.current);
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
       }
     } catch {
@@ -1130,6 +1133,7 @@ const stopScreenShare = useCallback(async () => {
     screenStreamRef.current = null;
     setIsScreenSharing(false);
     if (s) {
+      await stopScreenAudio(s);
       try { s.getTracks().forEach((t) => t.stop()); } catch { }
     }
     if (!isVideoEnabled) return;
@@ -1152,7 +1156,7 @@ const toggleScreenShare = async () => {
     return;
   }
   try {
-    const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const displayStream = await requestScreen();
     const track = displayStream.getVideoTracks()[0];
     if (!track) return;
     screenStreamRef.current = displayStream;
@@ -1161,6 +1165,7 @@ const toggleScreenShare = async () => {
       stopScreenShare();
     };
     await replaceVideoTrack(track);
+    await startScreenAudio(displayStream, localStreamRef.current, () => [pcRef.current].filter(Boolean));
   } catch (e) {
     console.warn("toggleScreenShare failed:", e);
   }
@@ -1261,7 +1266,7 @@ const GroupCallView = ({ user, chatId, callData, onEndCall, isVideoEnabled = tru
     } catch { }
     localStreamRef.current = null;
     try {
-      if (screenStreamRef.current) screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      if (screenStreamRef.current) { stopScreenAudio(screenStreamRef.current); screenStreamRef.current.getTracks().forEach((t) => t.stop()); }
     } catch { }
     screenStreamRef.current = null;
     setIsScreenSharing(false);
@@ -1513,6 +1518,7 @@ const GroupCallView = ({ user, chatId, callData, onEndCall, isVideoEnabled = tru
       screenStreamRef.current = null;
       setIsScreenSharing(false);
       if (s) {
+        await stopScreenAudio(s);
         try { s.getTracks().forEach((t) => t.stop()); } catch { }
       }
       if (!isVideoEnabled) return;
@@ -1535,7 +1541,7 @@ const GroupCallView = ({ user, chatId, callData, onEndCall, isVideoEnabled = tru
       return;
     }
     try {
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const displayStream = await requestScreen();
       const track = displayStream.getVideoTracks()[0];
       if (!track) return;
       screenStreamRef.current = displayStream;
@@ -1544,6 +1550,7 @@ const GroupCallView = ({ user, chatId, callData, onEndCall, isVideoEnabled = tru
         stopScreenShare();
       };
       await replaceOutgoingVideoTrackAll(track);
+      await startScreenAudio(displayStream, localStreamRef.current, () => Array.from(pcsRef.current.values()));
     } catch (e) {
       console.warn("toggleScreenShare failed:", e);
     }
@@ -4020,6 +4027,7 @@ function LiveStreamModal({ open, onClose, user }) {
     cleanupRoomUnsubs();
     await cleanupHostPeers();
     await cleanupViewer();
+    try { stopScreenAudio(screenStreamRef.current); } catch (e) {}
     stopTracks(screenStreamRef.current);
     screenStreamRef.current = null;
     stopTracks(localStreamRef.current);
@@ -4406,7 +4414,7 @@ function LiveStreamModal({ open, onClose, user }) {
     if (!screenOn) {
       try {
         if (!navigator?.mediaDevices?.getDisplayMedia) throw new Error("このブラウザでは画面共有が使えません。");
-        const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        const ss = await requestScreen();
         screenStreamRef.current = ss;
         setScreenOn(true);
 
@@ -4421,6 +4429,9 @@ function LiveStreamModal({ open, onClose, user }) {
           } catch (e) {}
         }
 
+        // 動画の音も配信する（マイクとまぜて音声トラックを差し替える）
+        await startScreenAudio(ss, localStreamRef.current, () => Array.from(hostPeersRef.current.values()).map((p) => p.pc));
+
         // local preview also switches to screen to avoid confusion
         if (localVideoRef.current) {
           const previewStream = new MediaStream();
@@ -4432,6 +4443,7 @@ function LiveStreamModal({ open, onClose, user }) {
 
         screenTrack.onended = async () => {
           // back to camera
+          try { await stopScreenAudio(screenStreamRef.current); } catch (e) {}
           try { stopTracks(screenStreamRef.current); } catch (e) {}
           screenStreamRef.current = null;
           setScreenOn(false);
@@ -4450,6 +4462,7 @@ function LiveStreamModal({ open, onClose, user }) {
       }
     } else {
       // stop screen share
+      try { await stopScreenAudio(screenStreamRef.current); } catch (e) {}
       try { stopTracks(screenStreamRef.current); } catch (e) {}
       screenStreamRef.current = null;
       setScreenOn(false);
@@ -8483,6 +8496,7 @@ const leaveGroupCall = async (chatId, sessionId, { forceClear = false } = {}) =>
         ] })
       ] }) }),
       /* @__PURE__ */ jsx(AlarmWatcher, {}),
+      user && /* @__PURE__ */ jsx(RingSync, { db, appId, uid: user.uid }),
       user && /* @__PURE__ */ jsx(LaunchNotifier, { user, chats, mutedChats, hiddenChats: profile?.hiddenChats, setView, setActiveChatId, allUsers, db, appId, showNotification }),
       user && /* @__PURE__ */ jsx(PaymentWatcher, { user, db, appId, setView, showNotification }),
       user && !activeCall && NAV_VIEWS.includes(view) && /* @__PURE__ */ jsx(BottomNav, {

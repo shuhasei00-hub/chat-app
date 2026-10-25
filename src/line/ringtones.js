@@ -55,10 +55,25 @@ export const getRingSettings = () => {
     return { ...DEFAULT_RING, ...s, quiet: { ...DEFAULT_RING.quiet, ...(s.quiet || {}) }, perUser: { ...(s.perUser || {}) } };
   } catch { return { ...DEFAULT_RING, quiet: { ...DEFAULT_RING.quiet }, perUser: {} }; }
 };
-export const setRingSettings = (patch) => {
-  const next = { ...getRingSettings(), ...patch };
+const notifyChanged = () => { try { window.dispatchEvent(new Event("ring-changed")); } catch { /* 無視 */ } };
+export const setRingSettings = (patch, { silent = false } = {}) => {
+  const next = { ...getRingSettings(), ...patch, updatedAt: Date.now() };
   try { localStorage.setItem(SET_KEY, JSON.stringify(next)); } catch { /* 無視 */ }
+  if (!silent) notifyChanged();
   return next;
+};
+// クラウドから取り込んだ設定を反映（更新時刻はクラウドのものをそのまま使う）
+export const applyRemoteSettings = (obj, at) => {
+  const next = { ...DEFAULT_RING, ...obj, quiet: { ...DEFAULT_RING.quiet, ...(obj?.quiet || {}) }, perUser: { ...(obj?.perUser || {}) }, updatedAt: at };
+  try { localStorage.setItem(SET_KEY, JSON.stringify(next)); } catch { /* 無視 */ }
+  try { window.dispatchEvent(new Event("ring-settings-applied")); } catch { /* 無視 */ }
+};
+
+// 端末で削除した着信音の記録（クラウドへ反映するまで保持）
+const PEND_KEY = "ringPendingDeletes";
+export const getPendingDeletes = () => { try { return JSON.parse(localStorage.getItem(PEND_KEY)) || []; } catch { return []; } };
+export const clearPendingDeletes = (ids) => {
+  try { localStorage.setItem(PEND_KEY, JSON.stringify(getPendingDeletes().filter((x) => !ids.includes(x)))); } catch { /* 無視 */ }
 };
 
 // "HH:MM" の範囲に今が入っているか（日をまたぐ 22:00→07:00 に対応）
@@ -95,8 +110,17 @@ export const listTones = async () => {
   catch { return []; }
 };
 export const getTone = async (id) => { try { return await tx("readonly", (s) => s.get(id)); } catch { return null; } };
-export const saveTone = (tone) => tx("readwrite", (s) => s.put(tone));
+export const saveTone = async (tone, { silent = false } = {}) => {
+  await tx("readwrite", (s) => s.put(tone));
+  try { navigator.storage?.persist?.(); } catch { /* 無視 */ }
+  if (!silent) notifyChanged();
+};
 export const deleteTone = async (id) => {
+  await deleteToneLocalOnly(id);
+  try { localStorage.setItem(PEND_KEY, JSON.stringify([...new Set([...getPendingDeletes(), id])])); } catch { /* 無視 */ }
+  notifyChanged();
+};
+export const deleteToneLocalOnly = async (id) => {
   await tx("readwrite", (s) => s.delete(id));
   // その音を使っている設定を標準に戻す
   const st = getRingSettings();

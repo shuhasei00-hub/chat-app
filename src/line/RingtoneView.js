@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Play, Square, Trash2, Upload, Check, Music, Loader2, Scissors, Moon } from "lucide-react";
 import { PageHeader } from "./common";
 import { playPreview, stopPreview, previewVibrate } from "./ring";
+import { syncState, syncNow } from "./ringSync";
 import {
   MAX_SEC, MAX_TONES, PRESETS_IN, PRESETS_OUT, VIBRATE_PATTERNS,
   getRingSettings, setRingSettings, listTones, saveTone, deleteTone,
@@ -167,6 +168,15 @@ const RingtoneView = ({ profile, allUsers, setView, showNotification }) => {
   const patch = (p) => setSt(setRingSettings(p));
   const reload = useCallback(() => listTones().then(setTones), []);
   useEffect(() => { reload(); return () => stopPreview(); }, [reload]);
+  const [, bump] = useState(0);
+  useEffect(() => {
+    // クラウドから復元されたら画面を更新
+    const onState = () => { bump((n) => n + 1); if (syncState.status === "ok") { reload(); setSt(getRingSettings()); } };
+    const onApplied = () => setSt(getRingSettings());
+    window.addEventListener("ring-sync-state", onState);
+    window.addEventListener("ring-settings-applied", onApplied);
+    return () => { window.removeEventListener("ring-sync-state", onState); window.removeEventListener("ring-settings-applied", onApplied); };
+  }, [reload]);
 
   const play = (ref, outgoing = false) => {
     const key = outgoing ? `out:${ref.split(":")[1]}` : ref;
@@ -207,6 +217,16 @@ const RingtoneView = ({ profile, allUsers, setView, showNotification }) => {
     <div className="flex flex-col h-full bg-gray-50">
       <PageHeader title="着信音・振動" onBack={() => { stopPreview(); setView("settings"); }} />
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-10">
+        <div className="mx-4 mt-3 rounded-xl bg-white border px-3 py-2 flex items-center gap-2 text-[11px]">
+          <span className={`w-2 h-2 rounded-full ${{ ok: "bg-green-500", syncing: "bg-amber-400 animate-pulse", error: "bg-red-500", off: "bg-gray-300", idle: "bg-gray-300" }[syncState.status] || "bg-gray-300"}`} />
+          <span className="flex-1 text-gray-500">
+            {syncState.status === "ok" && `アカウントに保存済み（ログアウトしても、別の端末でも残ります）`}
+            {syncState.status === "syncing" && "アカウントに保存中…"}
+            {syncState.status === "error" && "クラウド保存に失敗しました（この端末には保存されています）"}
+            {(syncState.status === "off" || syncState.status === "idle") && "ログインするとアカウントにも保存されます"}
+          </span>
+          {syncState.status !== "off" && <button onClick={syncNow} className="font-bold text-green-600">今すぐ同期</button>}
+        </div>
 
         <Section title="着信音" hint="試聴ボタンで鳴らせます。自分の音声ファイルは長くても大丈夫です。好きな部分（最大30秒）だけを選んで保存できます。">
           {PRESETS_IN.map((p) => (

@@ -13,14 +13,14 @@ export const store = {
 export const copy = (t, note) => navigator.clipboard?.writeText(t).then(() => note?.("コピーしました")).catch(() => {});
 export const card = "bg-white rounded-2xl border p-4";
 export const btn = "py-3 rounded-xl font-bold text-sm";
-const inp = "w-full bg-gray-50 border rounded-xl px-3 py-2.5 text-sm outline-none";
+export const inp = "w-full bg-gray-50 border rounded-xl px-3 py-2.5 text-sm outline-none";
 export const rnd = (n) => { const a = new Uint32Array(1); const lim = Math.floor(0x100000000 / n) * n; do { crypto.getRandomValues(a); } while (a[0] >= lim); return a[0] % n; };
-const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const parseYmd = (s) => { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, (m || 1) - 1, d || 1); };
+export const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+export const parseYmd = (s) => { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, (m || 1) - 1, d || 1); };
 const dayDiff = (a, b) => Math.round((parseYmd(ymd(b)) - parseYmd(ymd(a))) / 86400000);
-const WD = ["日", "月", "火", "水", "木", "金", "土"];
-const fmtDate = (d) => `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）`;
-const useList = (key, init = []) => {
+export const WD = ["日", "月", "火", "水", "木", "金", "土"];
+export const fmtDate = (d) => `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）`;
+export const useList = (key, init = []) => {
   const [v, setV] = useState(() => store.get(key, init));
   const save = (n) => { setV(n); store.set(key, n); };
   return [v, save];
