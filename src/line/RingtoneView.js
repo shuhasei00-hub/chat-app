@@ -7,7 +7,7 @@ import { syncState, syncNow } from "./ringSync";
 import {
   MAX_SEC, MAX_TONES, PRESETS_IN, PRESETS_OUT, VIBRATE_PATTERNS,
   getRingSettings, setRingSettings, listTones, saveTone, deleteTone,
-  decodeFile, getPeaks, trimToWav,
+  decodeFile, getPeaks, trimToTone, estimateBytes,
 } from "./ringtones";
 
 const Section = ({ title, hint, children }) => (
@@ -19,6 +19,8 @@ const Section = ({ title, hint, children }) => (
 );
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}.${Math.floor((s % 1) * 10)}`;
+const fmtLen = (s) => (s >= 60 ? `${Math.floor(s / 60)}分${Math.round(s % 60)}秒` : `${s.toFixed(1)}秒`);
+const fmtMB = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)}MB` : `${Math.round(b / 1024)}KB`);
 
 const ToneRow = ({ name, sub, selected, playing, onSelect, onPlay, onDelete }) => (
   <div className="flex items-center gap-3 px-4 py-2.5">
@@ -123,7 +125,7 @@ const Trimmer = ({ file, onCancel, onSaved, showNotification }) => {
     setSaving(true);
     try {
       stopTrial();
-      const { blob, duration } = await trimToWav(buf, start, end, { fade: fade ? 0.4 : 0.02 });
+      const { blob, duration } = await trimToTone(buf, start, end, { fade: fade ? 0.4 : 0.02 });
       await saveTone({ id: `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: name.trim() || "マイ着信音", blob, duration, createdAt: Date.now() });
       showNotification?.("着信音を追加しました");
       onSaved();
@@ -132,12 +134,12 @@ const Trimmer = ({ file, onCancel, onSaved, showNotification }) => {
 
   return (
     <div className="bg-white border-y p-4 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-bold"><Scissors className="w-4 h-4 text-green-600" />使う部分を選ぶ<span className="ml-auto text-[10px] text-gray-400 font-normal">最大{MAX_SEC}秒</span></div>
+      <div className="flex items-center gap-2 text-sm font-bold"><Scissors className="w-4 h-4 text-green-600" />使う部分を選ぶ<span className="ml-auto text-[10px] text-gray-400 font-normal">最大7分</span></div>
       {err && <div className="text-xs text-red-500 bg-red-50 rounded-lg p-3">{err}</div>}
       {!buf && !err && <div className="flex items-center gap-2 text-xs text-gray-400 py-6 justify-center"><Loader2 className="w-4 h-4 animate-spin" />読み込み中…（長い曲は少し時間がかかります）</div>}
       {buf && (
         <>
-          <div className="text-[11px] text-gray-500">元の長さ {fmt(dur)} ／ 選択 {fmt(start)} 〜 {fmt(end)}（<b className="text-green-600">{(end - start).toFixed(1)}秒</b>）</div>
+          <div className="text-[11px] text-gray-500">元の長さ {fmt(dur)} ／ 選択 {fmt(start)} 〜 {fmt(end)}（<b className="text-green-600">{fmtLen(end - start)}</b>（保存サイズ 約{fmtMB(estimateBytes(end - start))}））</div>
           <canvas ref={canvasRef} width={480} height={70} className="w-full h-[70px] rounded-lg bg-gray-50" />
           <label className="block text-[11px] font-bold text-gray-500">開始位置
             <input type="range" min={0} max={dur} step={0.1} value={start} onChange={(e) => onStart(e.target.value)} className="w-full accent-green-500" />
@@ -228,13 +230,13 @@ const RingtoneView = ({ profile, allUsers, setView, showNotification }) => {
           {syncState.status !== "off" && <button onClick={syncNow} className="font-bold text-green-600">今すぐ同期</button>}
         </div>
 
-        <Section title="着信音" hint="試聴ボタンで鳴らせます。自分の音声ファイルは長くても大丈夫です。好きな部分（最大30秒）だけを選んで保存できます。">
+        <Section title="着信音" hint="試聴ボタンで鳴らせます。自分の音声ファイルは長くても大丈夫です。好きな部分（最大7分）を選んで保存できます。容量をおさえるため、長い曲ほど音質は少し低くなります。">
           {PRESETS_IN.map((p) => (
             <ToneRow key={p.id} name={p.name} selected={st.incoming === `preset:${p.id}`} playing={playingId === `preset:${p.id}`}
               onSelect={() => patch({ incoming: `preset:${p.id}` })} onPlay={() => play(`preset:${p.id}`)} />
           ))}
           {tones.map((t) => (
-            <ToneRow key={t.id} name={`♪ ${t.name}`} sub={`${t.duration.toFixed(1)}秒`} selected={st.incoming === `custom:${t.id}`} playing={playingId === `custom:${t.id}`}
+            <ToneRow key={t.id} name={`♪ ${t.name}`} sub={fmtLen(t.duration)} selected={st.incoming === `custom:${t.id}`} playing={playingId === `custom:${t.id}`}
               onSelect={() => patch({ incoming: `custom:${t.id}` })} onPlay={() => play(`custom:${t.id}`)} onDelete={() => remove(t)} />
           ))}
           {!file && (

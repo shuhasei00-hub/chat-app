@@ -1,13 +1,14 @@
 // 着信音の設定・保存（IndexedDB）・音声のトリミング。
-// 長い音声ファイルでも、好きな区間（最大 MAX_SEC 秒）を切り出して着信音にできます。
-// 切り出した音は 16bit モノラル WAV に変換して端末内（IndexedDB）に保存します（サーバーには送りません）。
+// 長い音声ファイルでも、好きな区間（最大 7 分）を切り出して着信音にできます。
+// 切り出した音は モノラル・4ビット ADPCM（容量 1/4・音質は少し低め）に変換して端末内（IndexedDB）に保存し、アカウントにもバックアップします。
 
-export const MAX_SEC = 30;            // 着信音として保存できる最大の長さ（秒）
+export const MAX_SEC = 420;           // 着信音として保存できる最大の長さ（秒）= 7分
 export const MAX_FILE_MB = 100;       // 読み込める元ファイルの上限（デコード時のメモリ対策）
-export const MAX_TONES = 20;          // 保存できる着信音の数
+export const MAX_TONES = 12;          // 保存できる着信音の数
 const DB_NAME = "chatRingtones";
 const STORE = "tones";
 const SET_KEY = "ringSettings";
+import { isAdpcm, encodeAdpcm, decodeAdpcm } from "./adpcm";
 
 // ---------- 内蔵の着信音（音声ファイル不要・プログラムで生成） ----------
 // steps: [開始秒, 周波数Hz, 長さ秒, 音量(0-1), 波形]
@@ -190,9 +191,15 @@ export const encodeWav = (buf) => {
   return new Blob([out], { type: "audio/wav" });
 };
 
-// buf の [start, end] 秒を切り出し、モノラル/32kHz にそろえて WAV にする。fade 秒のフェードイン/アウト付き。
-export const trimToWav = async (buf, start, end, { fade = 0.05, rate = 32000, gain = 1 } = {}) => {
-  const len = Math.max(0.1, Math.min(MAX_SEC, end - start));
+// 長さに応じた保存時のサンプリング周波数（長いほど低音質にして容量をおさえる）
+//   〜60秒: 32kHz（約 16KB/秒） / 〜3分: 22.05kHz（約 11KB/秒） / 7分まで: 16kHz（約 8KB/秒 → 7分で約 3.4MB）
+export const rateForLength = (sec) => (sec <= 60 ? 32000 : sec <= 180 ? 22050 : 16000);
+export const estimateBytes = (sec) => Math.round(sec * rateForLength(sec) / 2) + 16;
+
+// buf の [start, end] 秒を切り出し、モノラルにそろえて ADPCM にする。fade 秒のフェードイン/アウト付き。
+export const trimToTone = async (buf, start, end, { fade = 0.05, gain = 1 } = {}) => {
+  const len = Math.max(0.1, Math.min(MAX_SEC, end - start, buf.duration - Math.max(0, start)));
+  const rate = rateForLength(len);
   const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!OC) throw new Error("このブラウザは音声の加工に対応していません");
   const frames = Math.max(1, Math.round(len * rate));
@@ -210,7 +217,8 @@ export const trimToWav = async (buf, start, end, { fade = 0.05, rate = 32000, ga
     const p = off.startRendering();
     if (p && p.then) p.then(res, rej); else off.oncomplete = (e) => res(e.renderedBuffer);
   });
-  return { blob: encodeWav(rendered), duration: len };
+  const ab = encodeAdpcm(rendered.getChannelData(0), rendered.sampleRate);
+  return { blob: new Blob([ab], { type: "application/octet-stream" }), duration: len };
 };
 
 // ---------- 再生用バッファ（キャッシュ） ----------
@@ -219,7 +227,15 @@ export const loadToneBuffer = async (id) => {
   if (bufferCache.has(id)) return bufferCache.get(id);
   const t = await getTone(id);
   if (!t?.blob) return null;
-  const buf = await decodeArrayBuffer(await t.blob.arrayBuffer());
+  const ab = await t.blob.arrayBuffer();
+  let buf;
+  if (isAdpcm(ab)) {
+    // 自前形式（ADPCM）。以前の版で保存した WAV はブラウザの標準デコーダで読む
+    const { samples, rate } = decodeAdpcm(ab);
+    try { buf = new AudioBuffer({ length: samples.length, sampleRate: rate, numberOfChannels: 1 }); }
+    catch { const C = AC(); const c = new C(); buf = c.createBuffer(1, samples.length, rate); try { c.close(); } catch { /* 無視 */ } }
+    buf.copyToChannel(samples, 0);
+  } else buf = await decodeArrayBuffer(ab);
   bufferCache.set(id, buf);
   return buf;
 };
