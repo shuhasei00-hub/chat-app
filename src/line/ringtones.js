@@ -2,13 +2,13 @@
 // 長い音声ファイルでも、好きな区間（最大 7 分）を切り出して着信音にできます。
 // 切り出した音は モノラル・4ビット ADPCM（容量 1/4・音質は少し低め）に変換して端末内（IndexedDB）に保存し、アカウントにもバックアップします。
 
+import { isAdpcm, encodeAdpcm, decodeAdpcm } from "./adpcm";
 export const MAX_SEC = 420;           // 着信音として保存できる最大の長さ（秒）= 7分
 export const MAX_FILE_MB = 100;       // 読み込める元ファイルの上限（デコード時のメモリ対策）
 export const MAX_TONES = 12;          // 保存できる着信音の数
 const DB_NAME = "chatRingtones";
 const STORE = "tones";
 const SET_KEY = "ringSettings";
-import { isAdpcm, encodeAdpcm, decodeAdpcm } from "./adpcm";
 
 // ---------- 内蔵の着信音（音声ファイル不要・プログラムで生成） ----------
 // steps: [開始秒, 周波数Hz, 長さ秒, 音量(0-1), 波形]

@@ -6,7 +6,7 @@ import { PageHeader, dataDoc } from "./common";
 import { getPrefs, setPrefs, requestPermission, showNotice, enablePeriodicNews, registerSW } from "./notify";
 import { getPushStatus, pushSupported, sendTestPush, syncPush, syncPushPrefs } from "./pushClient";
 
-const APP_VERSION = "2.3.1";
+const APP_VERSION = "2.3.2";
 
 const Section = ({ title, children }) => (
   <div className="mt-4">
